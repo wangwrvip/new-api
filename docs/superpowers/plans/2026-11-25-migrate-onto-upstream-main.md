@@ -348,29 +348,29 @@ git commit -m "chore: 保留 Comet/OpenSpec 变更产物与本地忽略规则"
   - `model.QuotaData` 新增列：`InputTokens int`、`OutputTokens int`、`CacheTokens int`（与上游 `CacheReadTokens`/`CacheCreationTokens` 并存）。
   - `service.textQuotaSummary` 新增字段：`InputTokens int`、`CacheTokensTotal int`；`CacheTokens` 保持上游「缓存读」语义。
 
-- [ ] **Step 1: 以上游重置共享文件**
+- [x] **Step 1: 以上游重置共享文件**
 
 Run: `git checkout origin/main -- model/log.go model/usedata.go service/text_quota.go service/text_quota_test.go`
 Expected: 文件回到上游版本。
 
-- [ ] **Step 2: 手工合并日志 schema 与写入**
+- [x] **Step 2: 手工合并日志 schema 与写入**
 
 在 `model/log.go`：
 - `Log` 结构体加三列。
 - `RecordConsumeLogParams` 加上游已改的 `Content []*common.Message`、`Other *LogOther` 与新三字段。
 - `RecordConsumeLog` 保留上游 `other.setContent(params.Content)` 与 `LogQuotaData` 调用；新增 `inputTokens`/`cacheTokens` 回退逻辑（未传维度时 `inputTokens=PromptTokens`、`cacheTokens=0`），并写入新列；`LogQuotaData` 同时传上游 `CacheReadTokens`/`CacheCreationTokens` 与本地 `InputTokens`/`OutputTokens`/`CacheTokens`。
 
-- [ ] **Step 3: 合并 quota_data 查询与聚合**
+- [x] **Step 3: 合并 quota_data 查询与聚合**
 
 在 `model/usedata.go` 保留上游 `CacheReadTokens`/`CacheCreationTokens` 全部逻辑，追加本地三列到 `QuotaData`、缓存累加、`gorm.Expr` 增量更新、`quotaDataDimSumSelect` 与按用户/模型/时间的 Select 列表。
 
-- [ ] **Step 4: 合并 text_quota 维度计算**
+- [x] **Step 4: 合并 text_quota 维度计算**
 
 在 `service/text_quota.go` 的 `textQuotaSummary` 加 `InputTokens`、`CacheTokensTotal`；在计算处（上游 `summary.CacheTokens = usage.PromptTokensDetails.CachedTokens` 附近）补：
 `CacheTokensTotal = CacheTokens + CacheCreationTokens`；`InputTokens = PromptTokens - CacheTokens - CacheCreationTokens`（下限 0）。
 在 `RecordConsumeLog` 调用处传 `InputTokens`、`CacheTokens: CacheTokensTotal`、`CacheReadTokens: summary.CacheTokens`。
 
-- [ ] **Step 5: 适配并运行回归测试**
+- [x] **Step 5: 适配并运行回归测试**
 
 Run:
 ```bash
@@ -379,7 +379,7 @@ go test ./service/ -run 'CalculateTextQuotaSummary|CacheWriteTokensTotal|Compose
 ```
 Expected: 全绿。`model/record_consume_log_test.go` 需按上游 `Content []*common.Message` / `*LogOther` 调整构造，断言仍为：未传维度时 `InputTokens=PromptTokens`、`CacheTokens=0`；显式传入时三列与 `quota_data` 累加一致。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add model/log.go model/usedata.go model/record_consume_log_test.go service/text_quota.go service/text_quota_test.go
