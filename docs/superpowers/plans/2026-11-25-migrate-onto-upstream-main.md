@@ -785,11 +785,11 @@ git commit -m "docs: 记录迁移后上下文估算偏差复测结果"
 **Interfaces:**
 - Produces: 可构建含 `pptxgenjs` 的前端；`node:fs`/`node:https` 在浏览器构建中被替换为空模块。
 
-- [ ] **Step 1: 以上游为基线加入依赖与替换插件**
+- [x] **Step 1: 以上游为基线加入依赖与替换插件**
 
 在 `web/package.json` 的 dependencies 加 `pptxgenjs`；在 `web/rsbuild.config.ts` 的 rspack plugins 中加入 `NormalModuleReplacementPlugin`，指向新增的 `web/src/empty-module.js`。不要整体替换上游 `package.json`/`rsbuild.config.ts`。
 
-- [ ] **Step 2: 更新锁文件并验证**
+- [x] **Step 2: 更新锁文件并验证**
 
 Run:
 ```bash
@@ -797,7 +797,7 @@ cd web && bun install && bun run typecheck
 ```
 Expected: `bun.lock` 更新；typecheck 零错误。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add web/package.json web/bun.lock web/rsbuild.config.ts web/src/empty-module.js
