@@ -73,6 +73,14 @@ type glmUsageUpstreamResponse struct {
 	} `json:"data"`
 }
 
+// The two failure classes of parseGlmUsageResponse. They are matched with
+// errors.Is so the handler can return a stable, differentiated message: an
+// upstream business rejection versus a malformed response body.
+var (
+	glmUsageRejected        = errors.New("upstream rejected the request")
+	glmUsageInvalidResponse = errors.New("upstream response invalid")
+)
+
 // parseGlmUsageResponse classifies TOKENS_LIMIT windows: unit 6 is the
 // weekly quota, unit 3 with number 5 is the 5-hour rolling window; with an
 // unknown unit, a window resetting more than 24h away is treated as weekly
@@ -81,14 +89,14 @@ type glmUsageUpstreamResponse struct {
 func parseGlmUsageResponse(body []byte, nowMs int64) (glmUsageData, error) {
 	var upstream glmUsageUpstreamResponse
 	if err := common.Unmarshal(body, &upstream); err != nil {
-		return glmUsageData{}, fmt.Errorf("invalid GLM usage response: %w", err)
+		return glmUsageData{}, fmt.Errorf("%w: %v", glmUsageInvalidResponse, err)
 	}
 	if !upstream.Success {
 		msg := strings.TrimSpace(upstream.Msg)
 		if msg == "" {
 			msg = fmt.Sprintf("code %d", upstream.Code)
 		}
-		return glmUsageData{}, fmt.Errorf("GLM usage query failed: %s", msg)
+		return glmUsageData{}, fmt.Errorf("%w: %s", glmUsageRejected, msg)
 	}
 
 	data := glmUsageData{
@@ -176,7 +184,11 @@ func fetchGlmChannelUsage(ctx context.Context, channel *model.Channel) glmUsageC
 	data, err := parseGlmUsageResponse(body, time.Now().UnixMilli())
 	if err != nil {
 		common.SysError(common.LogText("GLM usage: channel %d: invalid upstream response: %s", channel.Id, err.Error()))
-		return glmUsageChannelResult{Message: "upstream response invalid"}
+		gatewayMessage := "upstream response invalid"
+		if errors.Is(err, glmUsageRejected) {
+			gatewayMessage = "upstream rejected the request"
+		}
+		return glmUsageChannelResult{Message: gatewayMessage}
 	}
 	return glmUsageChannelResult{glmUsageData: data}
 }

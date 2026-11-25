@@ -111,12 +111,12 @@ func TestParseGlmUsageResponse(t *testing.T) {
 		{
 			name:        "upstream failure envelope is surfaced as an error",
 			body:        `{"success":false,"code":401,"msg":"invalid api key"}`,
-			wantErrText: "invalid api key",
+			wantErrText: "upstream rejected the request: invalid api key",
 		},
 		{
 			name:        "non json body is surfaced as an error",
 			body:        `<html>gateway timeout</html>`,
-			wantErrText: "invalid",
+			wantErrText: "upstream response invalid",
 		},
 	}
 
@@ -204,6 +204,45 @@ func TestFetchGlmChannelUsageUsesChannelTransportSettings(t *testing.T) {
 	assert.Equal(t, "sk-glm-transport-settings", authHeader.Load())
 }
 
+func TestFetchGlmChannelUsageDistinguishesFailureMessages(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		message string
+	}{
+		{
+			name:    "upstream business rejection",
+			body:    `{"success":false,"code":401,"msg":"invalid api key"}`,
+			message: "upstream rejected the request",
+		},
+		{
+			name:    "malformed response body",
+			body:    `<html>gateway timeout</html>`,
+			message: "upstream response invalid",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+
+			channel := &model.Channel{
+				Id:      1,
+				Type:    constant.ChannelTypeZhipu,
+				Key:     "sk-glm-parse-error",
+				BaseURL: &server.URL,
+			}
+
+			result := fetchGlmChannelUsage(context.Background(), channel)
+
+			assert.False(t, result.Success)
+			assert.Equal(t, test.message, result.Message)
+		})
+	}
+}
+
 func TestGetGlmChannelsUsageRejectsMultiKeyChannel(t *testing.T) {
 	db := setupGlmUsageTestDB(t)
 	var requests atomic.Int32
@@ -216,7 +255,7 @@ func TestGetGlmChannelsUsageRejectsMultiKeyChannel(t *testing.T) {
 	channel := &model.Channel{
 		Name:        "glm-multi-key",
 		Type:        constant.ChannelTypeZhipu,
-		Key:         "key-one\nkey-two",
+		Key:         "sk-multi-key-test",
 		BaseURL:     &server.URL,
 		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2},
 	}
