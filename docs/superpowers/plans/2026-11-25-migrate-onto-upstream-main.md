@@ -490,16 +490,16 @@ git commit -m "feat: 使用报告后端聚合（周/月窗口、部门、缓存�
 **Interfaces:**
 - Produces: `controller.GetGlmChannelsUsage(c *gin.Context)`；路由 `GET /api/channel/glm/usage`。
 
-- [ ] **Step 1: 取本地实现**
+- [x] **Step 1: 取本地实现**
 
 Run: `git checkout backup-before-upstream -- controller/glm_usage.go controller/glm_usage_test.go glm-usage.py`
 Expected: 文件进入暂存区。
 
-- [ ] **Step 2: 合并路由**
+- [x] **Step 2: 合并路由**
 
 把本地 `permissionRoute` 条目加入上游 `channelPermissionRoutes` 切片，不得改动上游 `handlePermissionRoute`。
 
-- [ ] **Step 3: 运行测试**
+- [x] **Step 3: 运行测试**
 
 Run:
 ```bash
@@ -508,7 +508,7 @@ go test ./router/ -run 'ChannelGlmUsage|ChannelStatusRoutes|ChannelDeleteRoutes'
 ```
 Expected: 全绿；`TestChannelGlmUsageRoutePermission` 断言该路由要求 `ChannelRead`。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add controller/glm_usage.go controller/glm_usage_test.go glm-usage.py router/channel-router.go
