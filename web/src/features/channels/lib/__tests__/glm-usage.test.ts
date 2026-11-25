@@ -16,8 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { describe, expect, test } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { renderHook, waitFor } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
+import { getGlmUsageBatch } from '../../api'
+import { useGlmUsage } from '../../hooks/use-glm-usage'
 import type { GlmUsageBatchResponse, GlmUsageResult } from '../../types'
 import {
   chunkGlmChannelIds,
@@ -26,6 +31,48 @@ import {
   getWorstGlmRemainingPercent,
   mergeGlmUsageBatches,
 } from '../glm-usage'
+
+// Mock the network boundary: the hook must send one request per 50 ids, not
+// simply chunk a pure helper that no caller is forced to use.
+vi.mock('../../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api')>()
+  return { ...actual, getGlmUsageBatch: vi.fn() }
+})
+
+const batchRequest = vi.mocked(getGlmUsageBatch)
+
+function successfulBatch(ids: number[]): GlmUsageBatchResponse {
+  return {
+    success: true,
+    data: Object.fromEntries(ids.map((id) => [String(id), fullUsage])),
+  }
+}
+
+const failedUsage = {
+  success: false,
+  message: 'Failed to fetch usage',
+} as const
+
+let queryClient: QueryClient
+
+function wrapper(props: { children: ReactNode }) {
+  return createElement(
+    QueryClientProvider,
+    { client: queryClient },
+    props.children
+  )
+}
+
+beforeEach(() => {
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  batchRequest.mockReset()
+})
+
+afterEach(() => {
+  queryClient.clear()
+})
 
 const fullUsage: GlmUsageResult = {
   success: true,
@@ -68,6 +115,78 @@ describe('GLM usage batching', () => {
       message: 'Failed to fetch usage',
     })
   })
+})
+
+describe('useGlmUsage request batching', () => {
+  test('sends 100 ids in exactly two 50-id requests and returns every id once', async () => {
+    const ids = Array.from({ length: 100 }, (_, index) => index + 1)
+    batchRequest.mockImplementation(async (requested) =>
+      successfulBatch(requested)
+    )
+
+    const { result } = renderHook(() => useGlmUsage(ids), { wrapper })
+
+    await waitFor(() => expect(result.current.data).toHaveProperty('100'))
+    const batches = batchRequest.mock.calls.map(([requested]) => requested)
+    expect(batchRequest).toHaveBeenCalledTimes(2)
+    expect(batches).toEqual([ids.slice(0, 50), ids.slice(50, 100)])
+    expect(batches.flat()).toEqual(ids)
+    expect(new Set(batches.flat()).size).toBe(100)
+    for (const id of ids) {
+      expect(result.current.data?.[id]).toEqual(fullUsage)
+    }
+  })
+
+  test('marks only the ids of a failed batch as failed and keeps the other batch data', async () => {
+    const ids = Array.from({ length: 100 }, (_, index) => index + 1)
+    batchRequest
+      .mockResolvedValueOnce(successfulBatch(ids.slice(0, 50)))
+      .mockRejectedValueOnce(new Error('HTTP 500'))
+
+    const { result } = renderHook(() => useGlmUsage(ids), { wrapper })
+
+    await waitFor(() => expect(result.current.data).toHaveProperty('100'))
+    const batches = batchRequest.mock.calls.map(([requested]) => requested)
+    expect(batches).toEqual([ids.slice(0, 50), ids.slice(50, 100)])
+    for (const id of ids.slice(0, 50)) {
+      expect(result.current.data?.[id]).toEqual(fullUsage)
+    }
+    for (const id of ids.slice(50, 100)) {
+      expect(result.current.data?.[id]).toEqual(failedUsage)
+    }
+  })
+
+  test.each([
+    { count: 37, batches: [Array.from({ length: 37 }, (_, i) => i + 1)] },
+    {
+      count: 101,
+      batches: [
+        Array.from({ length: 50 }, (_, i) => i + 1),
+        Array.from({ length: 50 }, (_, i) => i + 51),
+        [101],
+      ],
+    },
+  ])(
+    'splits $count ids into the expected batches without losing ids',
+    async ({ count, batches }) => {
+      const ids = Array.from({ length: count }, (_, index) => index + 1)
+      batchRequest.mockImplementation(async (requested) =>
+        successfulBatch(requested)
+      )
+
+      const { result } = renderHook(() => useGlmUsage(ids), { wrapper })
+
+      await waitFor(() =>
+        expect(result.current.data).toHaveProperty(String(count))
+      )
+      const requests = batchRequest.mock.calls.map(([requested]) => requested)
+      expect(requests).toEqual(batches)
+      expect(requests.flat()).toEqual(ids)
+      for (const id of ids) {
+        expect(result.current.data?.[id]).toEqual(fullUsage)
+      }
+    }
+  )
 })
 
 describe('getGlmBadgeSegments', () => {
