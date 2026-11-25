@@ -509,6 +509,7 @@ func buildSelfUserData(user *model.User) map[string]any {
 		"wechat_id":         user.WeChatId,
 		"telegram_id":       user.TelegramId,
 		"group":             user.Group,
+		"department":        user.Department,
 		"quota":             user.Quota,
 		"used_quota":        user.UsedQuota,
 		"request_count":     user.RequestCount,
@@ -663,6 +664,11 @@ func UpdateUser(c *gin.Context) {
 	}
 	if err := common.Validate.StructExcept(&updatedUser, "Password"); err != nil {
 		common.ApiErrorT(c, "Invalid input {{error}}", map[string]any{"error": err.Error()})
+		return
+	}
+	updatedUser.Department, err = setting.NormalizeDepartment(updatedUser.Department)
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid parameters"))
 		return
 	}
 	originUser, err := model.GetUserById(updatedUser.Id, false)
@@ -1016,6 +1022,11 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
+	user.Department, err = setting.NormalizeDepartment(user.Department)
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Invalid parameters"))
+		return
+	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
 		common.ApiErrorT(c, "Cannot create users with permission level equal to or higher than yourself")
@@ -1035,6 +1046,7 @@ func CreateUser(c *gin.Context) {
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
+		Department:  user.Department,
 		Role:        user.Role, // 保持管理员设置的角色
 	}
 	authzTouched := false

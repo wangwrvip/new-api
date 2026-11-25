@@ -59,6 +59,7 @@ func InitOptionMap() {
 	jsplugin.DefaultRegistry.SetEnabled(constant.TaskPluginEnabled)
 	common.OptionMap[setting.TaskPluginMarketplaceSourcesKey] = setting.TaskPluginMarketplaceSources2JsonString()
 	common.OptionMap[setting.TaskPluginDisabledFactoryKeysKey] = "[]"
+	common.OptionMap[setting.DepartmentListKey] = setting.Departments2JsonString()
 	jsplugin.DefaultRegistry.SetDisabledFactoryKeys(nil)
 	common.OptionMap["DataExportEnabled"] = strconv.FormatBool(common.DataExportEnabled)
 	common.OptionMap["ChannelDisableThreshold"] = strconv.FormatFloat(common.ChannelDisableThreshold, 'f', -1, 64)
