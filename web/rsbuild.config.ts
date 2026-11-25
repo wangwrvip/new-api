@@ -2,6 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { defineConfig, loadEnv } from '@rsbuild/core'
+import { NormalModuleReplacementPlugin } from '@rspack/core'
 import { pluginReact } from '@rsbuild/plugin-react'
 import { pluginTailwindcss } from '@rsbuild/plugin-tailwindcss'
 import { tanstackRouter } from '@tanstack/router-plugin/rspack'
@@ -96,6 +97,14 @@ export default defineConfig(({ envMode }) => {
             // Prod: keep route-based code splitting.
             autoCodeSplitting: isProd,
           }),
+          // pptxgenjs ESM bundle dynamically imports `node:fs` / `node:https`
+          // (used only when fetching images from URLs server-side). Those branches
+          // are never reached in the browser — client export passes image data
+          // directly — so substitute empty modules instead of failing the build.
+          new NormalModuleReplacementPlugin(
+            /^node:/,
+            path.resolve(__dirname, 'src/empty-module.js')
+          ),
         ],
       },
     },
