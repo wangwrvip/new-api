@@ -8,7 +8,7 @@
 
 ### Requirement: 按模型限制输入上下文
 
-系统 SHALL 在每次 **HTTP 中继请求**转发前计算输入侧 token 总数并与该模型的上限比较。全局默认上限与按模型覆写同时存在时，按模型配置优先；上限为 0 表示不限制。WebSocket 中继（`/v1/responses`）与异步 task 端点不在本次范围内。
+系统 SHALL 在每次 **HTTP 中继请求**转发前计算输入侧 token 总数并与该模型的上限比较。全局默认上限与按模型覆写同时存在时，按模型配置优先；上限为 0 表示不限制。WebSocket 中继（`/v1/responses`）与异步任务端点（`controller.RelayTask` 路径）不在本次范围内；经 `controller.Relay` 进入的 task-plugin 协议 HTTP 端点（如 `openai_responses.create`、`openai_image.generate`/`edit`）仍受本限制约束。
 
 #### Scenario: 未超限放行
 
@@ -35,10 +35,11 @@
 - **WHEN** 运维关闭了请求 token 估算的计费开关
 - **THEN** 上下文限制仍按模型上限判定，超出上限的请求依旧返回 HTTP 413
 
-#### Scenario: WebSocket 与异步 task 不在本次范围
+#### Scenario: WebSocket 与异步任务端点不在本次范围
 
-- **WHEN** 请求通过 WebSocket 中继（`/v1/responses`）或异步 task 端点提交
+- **WHEN** 请求通过 WebSocket 中继（`/v1/responses`）或异步任务端点（`controller.RelayTask` 路径）提交
 - **THEN** 本 change 不对其输入上下文做上限判定，该覆盖由后续独立 change 跟进
+- **AND** 经 `controller.Relay` 进入的 task-plugin 协议 HTTP 端点不适用该例外，仍按本需求判定
 
 ### Requirement: 估算偏差可控
 

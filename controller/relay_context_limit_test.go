@@ -75,9 +75,12 @@ func TestContextLimitErrorOtherKeepsChannelInfoAdminOnly(t *testing.T) {
 // disabling the billing estimation switch must not silently disable it. The
 // user has no quota and a wallet-only preference, so if billing ran before the
 // limit check the response would be 403 insufficient_user_quota; receiving 413
-// is itself proof that no pre-consume was attempted.
+// is itself proof that no pre-consume was attempted. The zero-quota fixture
+// plus the 413/403 status assertions are what actually guard the ordering: a
+// quota re-read cannot distinguish it, because the fixture starts at zero and a
+// pre-consume followed by a refund would leave the stored balance at zero too.
 func TestRelayContextLimitRejectsBeforePreConsumeWithBillingSwitchOff(t *testing.T) {
-	database, user := setupContextLimitRelayTest(t)
+	_, user := setupContextLimitRelayTest(t)
 	withContextLimitBillingConfig(t)
 	withContextLimitSetting(t, contextLimitTestModel, 1)
 	withCountTokenDisabled(t)
@@ -92,10 +95,6 @@ func TestRelayContextLimitRejectsBeforePreConsumeWithBillingSwitchOff(t *testing
 	}
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	assert.Equal(t, "context_limit_exceeded", response.Error.Code)
-
-	var reloaded model.User
-	require.NoError(t, database.First(&reloaded, user.Id).Error)
-	assert.Zero(t, reloaded.Quota, "a rejected request must not pre-consume quota")
 }
 
 // TestRelayContextLimitAllowsUnderLimitIntoBillingWithBillingSwitchOff proves
