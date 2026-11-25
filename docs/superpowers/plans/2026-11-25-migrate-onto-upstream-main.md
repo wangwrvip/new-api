@@ -703,11 +703,11 @@ git commit -m "feat: 上下文限制改接 CountRequestToken（不受计费估�
 - Consumes: `relayInfo.GetEstimatePromptTokens() int`（上游原生字段，由 `PrepareRequestBilling` 设置）；`model.LogOther.SetPublic`。
 - Produces: 消费日志公开字段 `estimated_prompt_tokens`，仅当估算值 > 0 时写入。
 
-- [ ] **Step 1: 在消费日志 other 中写入估算值**
+- [x] **Step 1: 在消费日志 other 中写入估算值**
 
 在 `service/log_info_generate.go` 的 `GenerateTextOtherInfo` 中，`relayInfo != nil` 且 `estimated := relayInfo.GetEstimatePromptTokens()` 大于 0 时 `other.SetPublic("estimated_prompt_tokens", estimated)`；等于 0 时不写任何键。
 
-- [ ] **Step 2: 适配测试到 LogOther**
+- [x] **Step 2: 适配测试到 LogOther**
 
 恢复 `service/log_info_generate_test.go` 的两个回归：
 - `TestGenerateTextOtherInfoWritesEstimatedPromptTokens`：估算值 33126 → `Snapshot()["estimated_prompt_tokens"] == 33126`。
@@ -716,12 +716,12 @@ git commit -m "feat: 上下文限制改接 CountRequestToken（不受计费估�
 Run: `go test ./service/ -run 'EstimatedPromptTokens|OmitsZeroEstimate'`
 Expected: 全绿。
 
-- [ ] **Step 3: 验证日志详情可见**
+- [x] **Step 3: 验证日志详情可见**
 
 在 `model/log_format_test.go` 增加断言：`formatLogOtherJSON` 的用户可见投影保留 `estimated_prompt_tokens`（public 字段不被剥离）。Run: `go test ./model/ -run LogFormat`
 Expected: 全绿。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add service/log_info_generate.go service/log_info_generate_test.go model/log_format_test.go

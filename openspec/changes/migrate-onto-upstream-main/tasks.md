@@ -22,7 +22,7 @@
 
 - [x] 4.1 丢弃本地的 token 统计增强提交（`service/tokenizer.go` codec 池、`relaykit/dto` 计数增强、`service/token_estimator.go`），采用上游 `tokenkit`；验证 `cd relaykit && GOWORK=off go build ./...` 与根模块构建通过
 - [ ] 4.2 把上下文限制接到上游 `CountRequestToken`，保持 413 拦截与错误日志契约；验证超限请求返回 413 且错误码为 `context_limit_exceeded`
-- [ ] 4.3 适配消费日志的 `estimated_prompt_tokens` 写入与前端「估算 / 实际」展示；验证新增字段在日志详情接口返回中可见
+- [x] 4.3 适配消费日志的 `estimated_prompt_tokens` 写入与前端「估算 / 实际」展示；验证新增字段在日志详情接口返回中可见
 - [ ] 4.4 用同一批真实 Claude Code 请求复测估算偏差，与迁移前基线对比；验证偏差绝对值不超过 10%
 
 ## 5. 批次四：前端重建
