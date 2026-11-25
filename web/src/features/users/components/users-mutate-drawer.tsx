@@ -97,6 +97,8 @@ import {
   transformFormDataToPayload,
   transformUserToFormDefaults,
 } from '../lib'
+import { useDepartments } from '../hooks/use-departments'
+import { FALLBACK_DEPARTMENTS } from '../lib/departments'
 import type { User } from '../types'
 import { UserQuotaDialog } from './user-quota-dialog'
 import { useUsers } from './users-provider'
@@ -130,6 +132,9 @@ export function UsersMutateDrawer({
   })
 
   const groups = groupsData?.data || []
+
+  // Fetch departments (created in user management page, editable there)
+  const { data: departments = FALLBACK_DEPARTMENTS } = useDepartments()
 
   // Permission catalog is owned by the backend; fetched once and reused.
   const { data: permissionCatalog = EMPTY_PERMISSION_CATALOG } = useQuery({
@@ -171,6 +176,17 @@ export function UsersMutateDrawer({
   const selectedRole = form.watch('role')
   const canEditAdminPermissions = currentUser?.role === ROLE.SUPER_ADMIN
   const targetIsAdmin = (selectedRole ?? currentRow?.role ?? 0) >= ROLE.ADMIN
+
+  // A department removed from the settings list can still be assigned to a user.
+  // Keep that stale value selectable so editing such a user is never blocked.
+  const currentDepartment = form.watch('department')
+  const staleDepartment =
+    currentDepartment && !departments.includes(currentDepartment)
+      ? currentDepartment
+      : undefined
+  const departmentOptions = staleDepartment
+    ? [staleDepartment, ...departments]
+    : departments
 
   const onSubmit = async (data: UserFormValues) => {
     if (!isUpdate || data.password) {
@@ -383,6 +399,53 @@ export function UsersMutateDrawer({
                       </FormControl>
                       <FormDescription>
                         {t('Leave empty to use username')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='department'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Department')}</FormLabel>
+                      <Select
+                        items={departmentOptions.map((department) => ({
+                          value: department,
+                          label: department,
+                        }))}
+                        onValueChange={(value) =>
+                          value !== null && field.onChange(value)
+                        }
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={t('Select a department')}
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            {departmentOptions.map((department) => (
+                              <SelectItem key={department} value={department}>
+                                {department}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {staleDepartment
+                          ? t(
+                              'This department is no longer in the list. Choose a current department before saving.'
+                            )
+                          : t(
+                              'Users without a department belong to the default department'
+                            )}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

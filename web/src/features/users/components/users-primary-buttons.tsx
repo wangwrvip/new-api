@@ -16,16 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Plus } from 'lucide-react'
+import { Building2, Plus } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 
+import { DepartmentsManageDialog } from './departments-manage-dialog'
 import { useUsers } from './users-provider'
 
 export function UsersPrimaryButtons() {
   const { t } = useTranslation()
   const { setOpen, setCurrentRow } = useUsers()
+  const [departmentsOpen, setDepartmentsOpen] = useState(false)
 
   const handleCreate = () => {
     setCurrentRow(null)
@@ -34,10 +37,23 @@ export function UsersPrimaryButtons() {
 
   return (
     <div className='flex gap-2'>
+      <Button
+        size='sm'
+        variant='outline'
+        onClick={() => setDepartmentsOpen(true)}
+      >
+        <Building2 className='h-4 w-4' />
+        {t('Manage Departments')}
+      </Button>
       <Button size='sm' onClick={handleCreate}>
         <Plus className='h-4 w-4' />
         {t('Add User')}
       </Button>
+
+      <DepartmentsManageDialog
+        open={departmentsOpen}
+        onOpenChange={setDepartmentsOpen}
+      />
     </div>
   )
 }

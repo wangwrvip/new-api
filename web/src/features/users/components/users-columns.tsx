@@ -26,6 +26,7 @@ import { GroupBadge } from '@/components/group-badge'
 import { LongText } from '@/components/long-text'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
@@ -42,6 +43,7 @@ import {
   USER_ROLES,
   isUserDeleted,
 } from '../constants'
+import { DEFAULT_DEPARTMENT } from '../lib/departments'
 import type { User } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 import { UserQuotaCell } from './user-quota-cell'
@@ -214,6 +216,20 @@ export function useUsersColumns(): ColumnDef<User>[] {
         },
         size: 140,
         meta: { mobileOrder: 30 },
+      },
+      {
+        accessorKey: 'department',
+        header: t('Department'),
+        cell: ({ row }) => {
+          const department = row.original.department || DEFAULT_DEPARTMENT
+          return (
+            <BadgeCell>
+              <Badge variant='outline'>{department}</Badge>
+            </BadgeCell>
+          )
+        },
+        size: 140,
+        meta: { mobileOrder: 35 },
       },
       {
         accessorKey: 'role',
