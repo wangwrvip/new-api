@@ -179,10 +179,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}()
 
 	generalSettings := operation_setting.GetGeneralSetting()
-	if relayFormat == types.RelayFormatClaude && relayInfo.IsStream && generalSettings.PingIntervalEnabled {
-		stopKeepAlive := helper.StartStreamKeepAlive(c, time.Duration(generalSettings.PingIntervalSeconds)*time.Second)
-		defer stopKeepAlive()
-	}
 
 	// Request preview: when enabled and consume logs are written, keep the
 	// first N tokens of the request text and the last user message (what the
@@ -193,27 +189,29 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	if previewEnabled || contextLimit > 0 {
 		tokenCountMeta = request.GetTokenCountMeta()
 	}
+
+	// Context limit: reject an over-limit prompt before any pre-consume and
+	// before the keep-alive writes SSE headers, so the rejection is a plain 413
+	// rather than a 200 stream carrying an error. The count uses
+	// CountRequestToken, which ignores the CountToken billing-estimation switch.
+	// A nil meta means the format exposes no prompt metadata; Realtime is not
+	// skipped here because its meta is non-nil, it is exempt inside
+	// CountRequestToken by relay format.
+	if contextLimit > 0 && tokenCountMeta != nil {
+		tokens, countErr := service.CountRequestToken(c, tokenCountMeta, relayInfo)
+		if newAPIError = enforceContextLimit(c, relayInfo, tokens, contextLimit, countErr); newAPIError != nil {
+			return
+		}
+	}
+
+	if relayFormat == types.RelayFormatClaude && relayInfo.IsStream && generalSettings.PingIntervalEnabled {
+		stopKeepAlive := helper.StartStreamKeepAlive(c, time.Duration(generalSettings.PingIntervalSeconds)*time.Second)
+		defer stopKeepAlive()
+	}
+
 	if previewEnabled && tokenCountMeta != nil && tokenCountMeta.CombineText != "" {
 		relayInfo.RequestPreview = service.TruncateTextToTokens(tokenCountMeta.CombineText, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
 		relayInfo.RequestPreviewUser = service.TruncateTextToTokens(tokenCountMeta.LastUserMessage, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
-	}
-
-	// Context limit: reject an over-limit prompt before any pre-consume. The
-	// count uses CountRequestToken so the limit keeps working when the
-	// CountToken billing-estimation switch is off. A nil meta means the
-	// format has no prompt to measure (for example Realtime), so skip.
-	if contextLimit > 0 && tokenCountMeta != nil {
-		tokens, countErr := service.CountRequestToken(c, tokenCountMeta, relayInfo)
-		if countErr != nil {
-			newAPIError = types.NewError(countErr, types.ErrorCodeCountTokenFailed)
-			return
-		}
-		if tokens > contextLimit {
-			logger.LogWarn(c, fmt.Sprintf("context limit exceeded: model %s estimated prompt tokens %d > limit %d", relayInfo.OriginModelName, tokens, contextLimit))
-			recordContextLimitErrorLog(c, relayInfo, tokens, contextLimit)
-			newAPIError = contextLimitError(relayInfo.OriginModelName, tokens, contextLimit)
-			return
-		}
 	}
 
 	if newAPIError = relay.PrepareRequestBilling(c, relayInfo); newAPIError != nil {
@@ -302,6 +300,25 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 }
 
+// enforceContextLimit decides whether a request may proceed past the context
+// limit. A failed count fails open: the limit is a safety boundary, not a
+// billing decision, so missing or unparsable prompt metadata (an audio file
+// whose duration cannot be read, an unreachable or undecodable URL image, ...)
+// must not turn an otherwise valid relay into an error. The failure is logged
+// with the model and reason so operators can still see the skipped check.
+func enforceContextLimit(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens, limit int, countErr error) *types.NewAPIError {
+	if countErr != nil {
+		logger.LogWarn(c, fmt.Sprintf("context limit check skipped: model %s, token count failed: %v", relayInfo.OriginModelName, countErr))
+		return nil
+	}
+	if tokens <= limit {
+		return nil
+	}
+	logger.LogWarn(c, fmt.Sprintf("context limit exceeded: model %s estimated prompt tokens %d > limit %d", relayInfo.OriginModelName, tokens, limit))
+	recordContextLimitErrorLog(c, relayInfo, tokens, limit)
+	return contextLimitError(relayInfo.OriginModelName, tokens, limit)
+}
+
 func contextLimitError(model string, tokens, limit int) *types.NewAPIError {
 	return types.NewErrorWithStatusCode(
 		fmt.Errorf("estimated prompt tokens %d exceed the context limit %d for model %s, please compact the conversation or start a new session", tokens, limit, model),
@@ -322,8 +339,9 @@ func contextLimitErrorOther(c *gin.Context, relayInfo *relaycommon.RelayInfo, to
 	other.SetPublic("estimated_prompt_tokens", tokens)
 	other.SetPublic("context_limit", limit)
 	other.SetPublic("relay_format", string(relayInfo.RelayFormat))
-	// This rejection happens before channel selection, so use_channel is
-	// usually empty; it stays admin-only when a retry populated it.
+	// The distributor middleware already selected a channel, but this rejection
+	// runs before the controller's retry loop appends to use_channel, so it is
+	// normally empty. Keep it admin-only if a retry ever populated it.
 	if usedChannel := c.GetStringSlice("use_channel"); len(usedChannel) > 0 {
 		other.SetAdmin("use_channel", usedChannel)
 	}
@@ -331,7 +349,7 @@ func contextLimitErrorOther(c *gin.Context, relayInfo *relaycommon.RelayInfo, to
 }
 
 // recordContextLimitErrorLog records the context-limit rejection. That branch
-// returns before channel selection, so it never reaches processChannelError and
+// returns before the controller's retry loop reaches processChannelError, so it
 // must write its own error log for users and admins to see it.
 func recordContextLimitErrorLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens, limit int) {
 	if !constant.ErrorLogEnabled {

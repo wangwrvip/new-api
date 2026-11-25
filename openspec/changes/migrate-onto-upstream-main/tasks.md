@@ -43,5 +43,6 @@
 
 ## Workflow follow-up
 
+- WebSocket 与异步 task 路径的上下文限制覆盖作为独立 change 跟进
 - 归档前确认 `backup-before-upstream` 分支与 fork 远端的保留策略
 - 归档后清理 `migrate/upstream-2026-11` 分支（若已合并）

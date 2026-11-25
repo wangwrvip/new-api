@@ -8,7 +8,7 @@
 
 ### Requirement: 按模型限制输入上下文
 
-系统 SHALL 在每次转发请求前计算输入侧 token 总数并与该模型的上限比较。全局默认上限与按模型覆写同时存在时，按模型配置优先；上限为 0 表示不限制。
+系统 SHALL 在每次 **HTTP 中继请求**转发前计算输入侧 token 总数并与该模型的上限比较。全局默认上限与按模型覆写同时存在时，按模型配置优先；上限为 0 表示不限制。WebSocket 中继（`/v1/responses`）与异步 task 端点不在本次范围内。
 
 #### Scenario: 未超限放行
 
@@ -34,6 +34,11 @@
 
 - **WHEN** 运维关闭了请求 token 估算的计费开关
 - **THEN** 上下文限制仍按模型上限判定，超出上限的请求依旧返回 HTTP 413
+
+#### Scenario: WebSocket 与异步 task 不在本次范围
+
+- **WHEN** 请求通过 WebSocket 中继（`/v1/responses`）或异步 task 端点提交
+- **THEN** 本 change 不对其输入上下文做上限判定，该覆盖由后续独立 change 跟进
 
 ### Requirement: 估算偏差可控
 

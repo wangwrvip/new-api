@@ -69,6 +69,9 @@ func CountRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *relayco
 		if err != nil {
 			return 0, fmt.Errorf("error parsing multipart form: %v", err)
 		}
+		// Each parse spills large parts to temp files; the form is not reused
+		// after this function, so release them instead of waiting for GC.
+		defer multiForm.RemoveAll()
 		fileHeaders := multiForm.File["file"]
 		totalAudioToken := 0
 		for _, fileHeader := range fileHeaders {
