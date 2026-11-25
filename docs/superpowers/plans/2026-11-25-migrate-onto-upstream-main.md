@@ -959,7 +959,7 @@ git commit -m "feat(web): 重建上下文限制与日志预览设置分组"
 
 **Files:**
 - Add (from backup): `web/src/features/users/components/departments-manage-dialog.tsx`、`hooks/use-departments.ts`、`lib/departments.ts`、`lib/__tests__/departments.test.ts`、`components/users-primary-buttons.tsx`
-- Modify (merge): `web/src/features/users/components/users-columns.tsx`、`users-mutate-drawer.tsx`、`users-table.tsx`、`types.ts`
+- Modify (merge): `web/src/features/users/components/users-columns.tsx`、`users-mutate-drawer.tsx`、`users-table.tsx`、`types.ts`、`lib/user-form.ts`（表单 schema、默认值、`transformFormDataToPayload` —— 缺此项部门永远发不出去，管理员编辑会把用户部门重置为公共部门）
 
 **Interfaces:**
 - Consumes: P2.2 的 `department` 字段与部门清单接口。
