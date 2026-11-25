@@ -74,10 +74,14 @@ func TestNormalizeDepartment(t *testing.T) {
 }
 
 func TestDepartmentsJsonStringRoundTrip(t *testing.T) {
-	useDepartmentListOption(t, Departments2JsonString())
-
 	want := []string{DefaultDepartment, "视频部", "单片机", "路由网关", "测试组", "硬件部", "工控机部", "平台部"}
 
+	raw := Departments2JsonString()
+	var decoded []string
+	require.NoError(t, common.UnmarshalJsonStr(raw, &decoded))
+	require.Equal(t, want, decoded)
+
+	useDepartmentListOption(t, raw)
 	assert.Equal(t, want, GetDepartments())
 }
 
