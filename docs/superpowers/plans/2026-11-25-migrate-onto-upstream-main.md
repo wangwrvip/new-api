@@ -159,7 +159,7 @@ Expected: 四条命令均退出 0。若 `pg_data` 权限导致 `go list` 报警�
 **Interfaces:**
 - Produces: `origin/main` 提交号、Go/Bun 版本、三模块测试结果、前端测试结果、估算偏差基线。
 
-- [ ] **Step 1: 记录版本与提交**
+- [x] **Step 1: 记录版本与提交**
 
 Run:
 ```bash
@@ -167,7 +167,7 @@ Run:
 ```
 Expected: 三行内容写入文件。
 
-- [ ] **Step 2: 记录三模块测试基线**
+- [x] **Step 2: 记录三模块测试基线**
 
 Run:
 ```bash
@@ -178,7 +178,7 @@ go test $pkgs 2>&1 | tee -a /tmp/migrate-upstream-baseline.txt
 ```
 Expected: 结果追加到基线文件；记录失败包名（上游基线若本身有失败，明确标注，不与迁移引入的失败混淆）。
 
-- [ ] **Step 3: 记录前端测试基线**
+- [x] **Step 3: 记录前端测试基线**
 
 Run:
 ```bash
@@ -186,7 +186,7 @@ cd web && bun install --frozen-lockfile && bun run test 2>&1 | tee -a /tmp/migra
 ```
 Expected: 结果追加；若依赖安装受网络阻塞，记录阻塞原因而非伪造通过。
 
-- [ ] **Step 4: 捕获估算偏差基线（22 条真实 Claude Code 请求）**
+- [x] **Step 4: 捕获估算偏差基线（22 条真实 Claude Code 请求）**
 
 用迁移前的 `backup-before-upstream` 二进制在独立工作树运行：
 ```bash
@@ -199,10 +199,10 @@ Expected: 22 个请求体 + 实际输入计量；后续 P3.4 用同一批请求�
 
 ### Gate G0: 迁移准备门禁
 
-- [ ] 重跑 P0.2 Step 3 的三模块构建，全部退出 0。
-- [ ] 确认 `/tmp/migrate-upstream-baseline.txt` 存在且包含版本、三模块、前端、估算基线四节。
-- [ ] 确认基线中的失败项已被记录并分类（环境原因 / 上游既有失败 / 真实阻塞）。
-- [ ] 任何阻塞未解决时停止，不进入阶段 1。
+- [x] 重跑 P0.2 Step 3 的三模块构建，全部退出 0。
+- [x] 确认 `/tmp/migrate-upstream-baseline.txt` 存在且包含版本、三模块、前端、估算基线四节。
+- [x] 确认基线中的失败项已被记录并分类（环境原因 / 上游既有失败 / 真实阻塞）。
+- [x] 任何阻塞未解决时停止，不进入阶段 1。
 
 ---
 
