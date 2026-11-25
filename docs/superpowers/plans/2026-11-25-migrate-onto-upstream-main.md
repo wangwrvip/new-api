@@ -121,7 +121,7 @@ Expected: `0`。
 **Interfaces:**
 - Produces: 可重复的三模块构建命令，供后续每个门禁复用。
 
-- [ ] **Step 1: 准备工具链环境**
+- [x] **Step 1: 准备工具链环境**
 
 Run:
 ```bash
@@ -131,12 +131,12 @@ export GOWORK=off
 ```
 Expected: `go version` 首次运行触发下载，最终输出 `go version go1.26.10 linux/amd64`。
 
-- [ ] **Step 2: 确保内嵌前端占位存在**
+- [x] **Step 2: 确保内嵌前端占位存在**
 
 Run: `mkdir -p web/dist && test -f web/dist/index.html || printf '<!doctype html>\n' > web/dist/index.html`
 Expected: `web/dist/index.html` 存在。
 
-- [ ] **Step 3: 构建三个模块**
+- [x] **Step 3: 构建三个模块**
 
 Run:
 ```bash
@@ -148,7 +148,7 @@ go build $pkgs
 ```
 Expected: 四条命令均退出 0。若 `pg_data` 权限导致 `go list` 报警，按记忆中的替代方案用 `grep '^github.com'` 过滤，不要因此判定构建失败。
 
-- [ ] **Step 4: 处理工具链拉取失败**
+- [x] **Step 4: 处理工具链拉取失败**
 
 若 Step 1 下载失败：从官方地址经 `HTTPS_PROXY` 下载 Go 1.26.10 安装包并替换 `/usr/local/go`，重跑 Step 3；把处理方式记录到 `/tmp/migrate-upstream-baseline.txt`。
 

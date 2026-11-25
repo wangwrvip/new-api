@@ -3,7 +3,7 @@
 ## 1. 迁移准备
 
 - [x] 1.1 从 `origin/main` 创建 `migrate/upstream-2026-11` 分支；验证 `git merge-base --is-ancestor origin/main HEAD` 返回 0
-- [ ] 1.2 验证 Go 1.26.10 工具链可通过 `GOTOOLCHAIN=auto` 拉取；验证根模块、`relaykit/`、`tokenkit/` 三个模块 `go build ./...` 全部通过
+- [x] 1.2 验证 Go 1.26.10 工具链可通过 `GOTOOLCHAIN=auto` 拉取；验证根模块、`relaykit/`、`tokenkit/` 三个模块 `go build ./...` 全部通过
 - [ ] 1.3 记录迁移基线：`origin/main` 提交号、三模块测试基线结果、前端 `bun run test` 基线结果，写入 change 目录备注
 
 ## 2. 批次一：文档重放
