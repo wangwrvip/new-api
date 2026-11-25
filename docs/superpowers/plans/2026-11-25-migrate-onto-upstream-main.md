@@ -258,24 +258,24 @@ git commit -m "docs: 重写 CLAUDE.md 为中文并合并上游新增条款"
 - Consumes: `backup-before-upstream` 中该文件最终状态。
 - Produces: 仓库内只有一个同名文件、一次 `add` 记录。
 
-- [ ] **Step 1: 取最终状态**
+- [x] **Step 1: 取最终状态**
 
 Run: `git checkout backup-before-upstream -- docs/superpowers/specs/2026-08-31-usage-report-ppt-design.md`
 Expected: 文件进入暂存区。
 
-- [ ] **Step 2: 确认没有同内容重复文件**
+- [x] **Step 2: 确认没有同内容重复文件**
 
 Run: `find docs -name '*usage-report*' -type f`
 Expected: 仅 `docs/superpowers/specs/2026-08-31-usage-report-ppt-design.md` 与 `docs/usage-report.md`（后者由 P2.3 提交）。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add docs/superpowers/specs/2026-08-31-usage-report-ppt-design.md
 git commit -m "docs: 重建使用报告设计文档（去除重复副本）"
 ```
 
-- [ ] **Step 4: 验证只出现一次新增记录**
+- [x] **Step 4: 验证只出现一次新增记录**
 
 Run: `git log --diff-filter=A --oneline -- docs/superpowers/specs/2026-08-31-usage-report-ppt-design.md`
 Expected: 只有 P1.2 产生的一行。
@@ -291,7 +291,7 @@ Expected: 只有 P1.2 产生的一行。
 - Consumes: `backup-before-upstream` 中本地产物；`/tmp/migrate-upstream-baseline.txt`。
 - Produces: 迁移分支上可继续使用的 Comet change 目录与 OpenSpec 产物。
 
-- [ ] **Step 1: 携带本地产物**
+- [x] **Step 1: 携带本地产物**
 
 Run:
 ```bash
@@ -299,11 +299,11 @@ git checkout backup-before-upstream -- .agents openspec docs/superpowers/specs/2
 ```
 Expected: 文件进入暂存区；`.comet/current-change.json` 仍被忽略。
 
-- [ ] **Step 2: 合并忽略规则**
+- [x] **Step 2: 合并忽略规则**
 
 以 `origin/main` 的 `.gitignore`/`.dockerignore` 为骨架，追加本地规则：`/pg_data/`、`/pg_data.tar.gz`、`.comet/current-change.json`、`/.local-tests/`、`go.work`、`go.work.sum`。`/node_modules/` 与 `web/dist` 保持上游已有规则，不重复。
 
-- [ ] **Step 3: 校验忽略生效**
+- [x] **Step 3: 校验忽略生效**
 
 Run:
 ```bash
@@ -311,7 +311,7 @@ git check-ignore -v pg_data pg_data.tar.gz .comet/current-change.json .local-tes
 ```
 Expected: 四条都命中对应规则。
 
-- [ ] **Step 4: 落入基线备注并提交**
+- [x] **Step 4: 落入基线备注并提交**
 
 把 `/tmp/migrate-upstream-baseline.txt` 复制为 `openspec/changes/migrate-onto-upstream-main/.comet/migration-baseline.md`，补一行「迁移分支起点 origin/main=6627f0e3f」。
 
