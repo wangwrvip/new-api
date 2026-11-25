@@ -449,7 +449,7 @@ git commit -m "feat: 用户部门属性与部门清单设置"
   - `model.GetUsageReport(period string, anchor time.Time, tzOffsetMin int) (*dto.UsageReport, error)`。
   - `controller.GetUsageReport(c *gin.Context)`。
 
-- [ ] **Step 1: 取本地最终实现**
+- [x] **Step 1: 取本地最终实现**
 
 Run:
 ```bash
@@ -457,11 +457,11 @@ git checkout backup-before-upstream -- dto/usage_report.go model/usage_report.go
 ```
 Expected: 8 个文件进入暂存区。
 
-- [ ] **Step 2: 注册路由**
+- [x] **Step 2: 注册路由**
 
 在 `router/api-router.go` 上游的 `dataRoute` 组内、`/flow/self` 之后加一行 `dataRoute.GET("/usage_report", middleware.AdminAuth(), controller.GetUsageReport)`。
 
-- [ ] **Step 3: 运行使用报告测试**
+- [x] **Step 3: 运行使用报告测试**
 
 Run:
 ```bash
@@ -470,11 +470,11 @@ go test ./controller/ -run UsageReport
 ```
 Expected: 全绿。若失败，优先检查 P2.1 的三列是否已建、P2.2 的 `Department` 字段是否可查。
 
-- [ ] **Step 4: 验证缓存命中率口径**
+- [x] **Step 4: 验证缓存命中率口径**
 
 在 `model/usage_report_test.go` 的 `TestAssembleUsageReportTokenDimensions` / `TestSumLogsByUserInRangeTokenDimensions` 中确认：`CacheReadTokens` 参与聚合，`Tokens = InputTokens + CacheTokens + CompletionTokens`；旧日志（三列为 0）回退为 `prompt_tokens + completion_tokens`。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add dto/usage_report.go model/usage_report.go model/usage_report_window.go model/usage_report_test.go model/usage_report_window_test.go controller/usage_report.go controller/usage_report_test.go docs/usage-report.md router/api-router.go
