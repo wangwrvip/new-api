@@ -57,9 +57,11 @@ import {
   DEFAULT_PAGE_SIZE,
   CHANNEL_STATUS,
   CHANNEL_STATUS_OPTIONS,
+  GLM_USAGE_CHANNEL_TYPES,
 } from '../constants'
 import { useChannelPriorityDrag } from '../hooks/use-channel-priority-drag'
 import { useChannelPriorityOrder } from '../hooks/use-channel-priority-order'
+import { useGlmUsage } from '../hooks/use-glm-usage'
 import {
   channelsQueryKeys,
   aggregateChannelsByTag,
@@ -80,6 +82,7 @@ import { ChannelTypeLogo } from './channel-type-badge'
 import { useChannelsColumns } from './channels-columns'
 import { useChannels } from './channels-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
+import { GlmUsageContext } from './glm-usage-context'
 
 const route = getRouteApi('/_authenticated/channels/')
 const CHANNELS_COLUMN_VISIBILITY_STORAGE_KEY = 'channels:column-visibility'
@@ -318,6 +321,27 @@ export function ChannelsTable() {
     return rawChannels
   }, [data, enableTagMode])
 
+  // Batch-fetch GLM usage for the current page's Zhipu channels and share it
+  // with the balance cells via context. The hook splits requests at the
+  // backend's 50-id limit, so a full page of 100 channels is fully covered.
+  const glmChannelIds = useMemo(
+    () =>
+      channels
+        .flatMap((row) => (isTagAggregateRow(row) ? row.children : [row]))
+        .filter((row) => GLM_USAGE_CHANNEL_TYPES.has(row.type))
+        .map((row) => row.id),
+    [channels]
+  )
+  const { data: glmUsageById, isLoading: glmUsageLoading } =
+    useGlmUsage(glmChannelIds)
+  const glmUsageContextValue = useMemo(
+    () => ({
+      usageById: glmUsageById ?? {},
+      isLoading: glmUsageLoading,
+    }),
+    [glmUsageById, glmUsageLoading]
+  )
+
   const totalCount = data?.data?.total || 0
   const typeCounts = data?.data?.type_counts
 
@@ -501,150 +525,152 @@ export function ChannelsTable() {
   ]
 
   return (
-    <ChannelPriorityContext.Provider value={dragControls}>
-      {priorityActionContainer &&
-        createPortal(
-          <ChannelPriorityModeToggle
-            active={reorderActive}
-            viewMode={viewMode}
-            reason={dragReason}
-            onChange={() => setReorderEnabled((value) => !value)}
-          />,
-          priorityActionContainer
-        )}
-      <ChannelPriorityDropHint
-        container={drag.feedbackContainer}
-        order={priorityOrder}
-        channels={channels}
-      />
-      <div
-        ref={drag.root}
-        role='region'
-        aria-label={t('Channels')}
-        {...drag.rootEvents}
-        className='relative h-full min-h-0 data-[priority-dragging=true]:select-none data-[priority-dragging=true]:[&_[data-sortable-id]]:pointer-events-none'
-      >
-        <DataTablePage
-          table={table}
-          columns={columns}
-          isLoading={isLoading}
-          isFetching={isFetching}
-          emptyTitle={t('No Channels Found')}
-          emptyDescription={t(
-            'No channels available. Create your first channel to get started.'
+    <GlmUsageContext.Provider value={glmUsageContextValue}>
+      <ChannelPriorityContext.Provider value={dragControls}>
+        {priorityActionContainer &&
+          createPortal(
+            <ChannelPriorityModeToggle
+              active={reorderActive}
+              viewMode={viewMode}
+              reason={dragReason}
+              onChange={() => setReorderEnabled((value) => !value)}
+            />,
+            priorityActionContainer
           )}
-          skeletonKeyPrefix='channel-skeleton'
-          enableCardView
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          renderCard={(row, { isSelected }) => (
-            <ChannelCard
-              row={row}
-              isSelected={isSelected}
-              reorderEnabled={reorderActive}
-            />
-          )}
-          cardGridClassName='grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3'
-          applyHeaderSize
-          afterTable={<ChannelPriorityStatus order={priorityOrder} />}
-          toolbarProps={{
-            collapsibleOnMobile: true,
-            searchPlaceholder: t('Filter by name, ID, or key...'),
-            searchDebounceMs: 500,
-            onReset: () => {
-              resetModelFilterInput()
-            },
-            additionalSearch: (
-              <Input
-                placeholder={t('Filter by model...')}
-                value={modelFilterInput}
-                onChange={onModelFilterInputChange}
-                onCompositionStart={onModelFilterCompositionStart}
-                onCompositionEnd={onModelFilterCompositionEnd}
-                className='w-full sm:w-[150px] lg:w-[180px]'
-              />
-            ),
-            filters: [
-              {
-                columnId: 'status',
-                title: t('Status'),
-                options: [...CHANNEL_STATUS_OPTIONS],
-                singleSelect: true,
-              },
-              {
-                columnId: 'type',
-                title: t('Type'),
-                options: typeFilterOptions,
-                singleSelect: true,
-              },
-              {
-                columnId: 'group',
-                title: t('Group'),
-                options: groupFilterOptions,
-                singleSelect: true,
-              },
-            ],
-            preActions: (
-              <>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        onClick={() => setSensitiveVisible(!sensitiveVisible)}
-                        aria-label={sensitiveVisible ? t('Hide') : t('Show')}
-                        className='text-muted-foreground hover:text-foreground size-8'
-                      />
-                    }
-                  >
-                    {sensitiveVisible ? (
-                      <Eye aria-hidden />
-                    ) : (
-                      <EyeOff aria-hidden />
-                    )}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {sensitiveVisible ? t('Hide') : t('Show')}
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant='ghost'
-                        size='icon'
-                        onClick={() => void refetch()}
-                        aria-label={t('Refresh')}
-                        aria-busy={isFetching}
-                        className='text-muted-foreground hover:text-foreground size-8'
-                      />
-                    }
-                  >
-                    <RefreshCw
-                      aria-hidden
-                      className={cn(isFetching && 'animate-spin')}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>{t('Refresh')}</TooltipContent>
-                </Tooltip>
-              </>
-            ),
-          }}
-          getRowClassName={(row, { isMobile }) => {
-            if (!isDisabledChannelRow(row.original)) {
-              return undefined
-            }
-            if (isMobile) {
-              return DISABLED_ROW_MOBILE
-            }
-            return DISABLED_ROW_DESKTOP
-          }}
-          bulkActions={
-            batchMode ? <DataTableBulkActions table={table} /> : null
-          }
+        <ChannelPriorityDropHint
+          container={drag.feedbackContainer}
+          order={priorityOrder}
+          channels={channels}
         />
-      </div>
-    </ChannelPriorityContext.Provider>
+        <div
+          ref={drag.root}
+          role='region'
+          aria-label={t('Channels')}
+          {...drag.rootEvents}
+          className='relative h-full min-h-0 data-[priority-dragging=true]:select-none data-[priority-dragging=true]:[&_[data-sortable-id]]:pointer-events-none'
+        >
+          <DataTablePage
+            table={table}
+            columns={columns}
+            isLoading={isLoading}
+            isFetching={isFetching}
+            emptyTitle={t('No Channels Found')}
+            emptyDescription={t(
+              'No channels available. Create your first channel to get started.'
+            )}
+            skeletonKeyPrefix='channel-skeleton'
+            enableCardView
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            renderCard={(row, { isSelected }) => (
+              <ChannelCard
+                row={row}
+                isSelected={isSelected}
+                reorderEnabled={reorderActive}
+              />
+            )}
+            cardGridClassName='grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-3'
+            applyHeaderSize
+            afterTable={<ChannelPriorityStatus order={priorityOrder} />}
+            toolbarProps={{
+              collapsibleOnMobile: true,
+              searchPlaceholder: t('Filter by name, ID, or key...'),
+              searchDebounceMs: 500,
+              onReset: () => {
+                resetModelFilterInput()
+              },
+              additionalSearch: (
+                <Input
+                  placeholder={t('Filter by model...')}
+                  value={modelFilterInput}
+                  onChange={onModelFilterInputChange}
+                  onCompositionStart={onModelFilterCompositionStart}
+                  onCompositionEnd={onModelFilterCompositionEnd}
+                  className='w-full sm:w-[150px] lg:w-[180px]'
+                />
+              ),
+              filters: [
+                {
+                  columnId: 'status',
+                  title: t('Status'),
+                  options: [...CHANNEL_STATUS_OPTIONS],
+                  singleSelect: true,
+                },
+                {
+                  columnId: 'type',
+                  title: t('Type'),
+                  options: typeFilterOptions,
+                  singleSelect: true,
+                },
+                {
+                  columnId: 'group',
+                  title: t('Group'),
+                  options: groupFilterOptions,
+                  singleSelect: true,
+                },
+              ],
+              preActions: (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          onClick={() => setSensitiveVisible(!sensitiveVisible)}
+                          aria-label={sensitiveVisible ? t('Hide') : t('Show')}
+                          className='text-muted-foreground hover:text-foreground size-8'
+                        />
+                      }
+                    >
+                      {sensitiveVisible ? (
+                        <Eye aria-hidden />
+                      ) : (
+                        <EyeOff aria-hidden />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {sensitiveVisible ? t('Hide') : t('Show')}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          onClick={() => void refetch()}
+                          aria-label={t('Refresh')}
+                          aria-busy={isFetching}
+                          className='text-muted-foreground hover:text-foreground size-8'
+                        />
+                      }
+                    >
+                      <RefreshCw
+                        aria-hidden
+                        className={cn(isFetching && 'animate-spin')}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>{t('Refresh')}</TooltipContent>
+                  </Tooltip>
+                </>
+              ),
+            }}
+            getRowClassName={(row, { isMobile }) => {
+              if (!isDisabledChannelRow(row.original)) {
+                return undefined
+              }
+              if (isMobile) {
+                return DISABLED_ROW_MOBILE
+              }
+              return DISABLED_ROW_DESKTOP
+            }}
+            bulkActions={
+              batchMode ? <DataTableBulkActions table={table} /> : null
+            }
+          />
+        </div>
+      </ChannelPriorityContext.Provider>
+    </GlmUsageContext.Provider>
   )
 }

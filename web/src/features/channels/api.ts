@@ -46,6 +46,7 @@ import type {
   GetChannelResponse,
   GetChannelsParams,
   GetChannelsResponse,
+  GlmUsageBatchResponse,
   MultiKeyManageParams,
   MultiKeyStatusResponse,
   SearchChannelsParams,
@@ -469,6 +470,20 @@ export async function resetCodexUsage(
     {},
     channelActionConfig({ disableDuplicate: true })
   )
+  return res.data
+}
+
+// ============================================================================
+// GLM (Zhipu) Channel Usage
+// ============================================================================
+
+export async function getGlmUsageBatch(
+  channelIds: number[]
+): Promise<GlmUsageBatchResponse> {
+  const res = await api.get<GlmUsageBatchResponse>('/api/channel/glm/usage', {
+    params: { ids: channelIds.join(',') },
+    ...channelActionConfig({ disableDuplicate: true }),
+  })
   return res.data
 }
 

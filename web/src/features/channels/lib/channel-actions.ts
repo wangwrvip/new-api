@@ -60,6 +60,9 @@ export const channelsQueryKeys = {
   detail: (id: number) => [...channelsQueryKeys.details(), id] as const,
   pluginCredentials: (id: number) =>
     [...channelsQueryKeys.detail(id), 'plugin_credentials'] as const,
+  glmUsages: (ids: number[]) =>
+    [...channelsQueryKeys.all, 'glm-usage', ids.join(',')] as const,
+  glmUsagesPrefix: () => [...channelsQueryKeys.all, 'glm-usage'] as const,
 }
 
 function getChannelTestResponseTime(

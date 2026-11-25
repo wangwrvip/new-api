@@ -428,3 +428,27 @@ export interface AddChannelRequest {
   batch_add_set_key_prefix_2_name?: boolean
   channel: Partial<Channel>
 }
+
+// ============================================================================
+// GLM (Zhipu) Coding Plan Usage
+// ============================================================================
+
+export type GlmUsageSlot = {
+  used_pct: number
+  remaining_pct: number
+  next_reset_ms: number
+}
+
+export type GlmUsageResult = {
+  success: boolean
+  message?: string
+  level?: string
+  five_h?: GlmUsageSlot | null
+  weekly?: GlmUsageSlot | null
+}
+
+export type GlmUsageBatchResponse = {
+  success: boolean
+  message?: string
+  data?: Record<string, GlmUsageResult>
+}

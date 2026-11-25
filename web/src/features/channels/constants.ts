@@ -38,6 +38,10 @@ export const CHANNEL_TYPE_VLLM = 62
 
 export const CHANNEL_TYPE_SGLANG = 63
 
+// Channel types whose GLM Coding Plan usage windows (5h / weekly) can be
+// queried from the upstream monitor endpoint: Zhipu legacy and Zhipu V4.
+export const GLM_USAGE_CHANNEL_TYPES = new Set<number>([16, 26])
+
 export const CHANNEL_TYPES = {
   0: 'Unknown',
   1: 'OpenAI',

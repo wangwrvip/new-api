@@ -27,7 +27,7 @@ import {
   Shuffle,
   SlidersHorizontal,
 } from 'lucide-react'
-import { useState, useMemo, useContext, useEffect } from 'react'
+import { useState, useMemo, useContext, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -60,12 +60,13 @@ import {
 } from '@/lib/server-error-message'
 import { truncateText } from '@/lib/utils'
 
-import { getCodexUsage, updateChannelBalance } from '../api'
+import { getCodexUsage, getGlmUsageBatch, updateChannelBalance } from '../api'
 import {
   CHANNEL_STATUS_CONFIG,
   CHANNEL_TYPE_TASK_PLUGIN,
   CHANNEL_TYPE_VLLM,
   CHANNEL_TYPE_SGLANG,
+  GLM_USAGE_CHANNEL_TYPES,
 } from '../constants'
 import {
   useChannelBalanceQueryable,
@@ -78,6 +79,9 @@ import {
   getChannelTypeIcon,
   getChannelTypeLabel,
   getResponseTimeConfig,
+  getGlmBadgeSegments,
+  getGlmRemainingVariant,
+  getWorstGlmRemainingPercent,
   isMultiKeyChannel,
   parseModelsList,
   parseGroupsList,
@@ -94,7 +98,7 @@ import {
   getChannelBalanceUsedPercent,
 } from '../lib/channel-balance'
 import { parseUpstreamUpdateMeta } from '../lib/upstream-update-utils'
-import type { Channel } from '../types'
+import type { Channel, GlmUsageResult } from '../types'
 import { ChannelBalanceDetails } from './channel-balance-details'
 import { ChannelRowActionsLayoutContext } from './channel-row-actions-context'
 import { TaskPluginChannelBadge } from './channel-type-badge'
@@ -106,6 +110,8 @@ import {
   CodexUsageDialog,
   type CodexUsageDialogData,
 } from './dialogs/codex-usage-dialog'
+import { GlmUsageDialog } from './dialogs/glm-usage-dialog'
+import { useGlmUsageContext } from './glm-usage-context'
 import { NumericSpinnerInput } from './numeric-spinner-input'
 
 function parseIonetMeta(otherInfo: string | null | undefined): null | {
@@ -369,6 +375,15 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const [codexUsageOpen, setCodexUsageOpen] = useState(false)
   const [codexUsageResponse, setCodexUsageResponse] =
     useState<CodexUsageDialogData | null>(null)
+  const [glmUsageOpen, setGlmUsageOpen] = useState(false)
+  const [glmUsageResponse, setGlmUsageResponse] =
+    useState<GlmUsageResult | null>(null)
+  const [glmRefreshing, setGlmRefreshing] = useState(false)
+  const glmUsageContext = useGlmUsageContext()
+  const isGlmChannel = GLM_USAGE_CHANNEL_TYPES.has(channel.type)
+  const glmUsage = isGlmChannel
+    ? glmUsageContext?.usageById[channel.id]
+    : undefined
   const currencyLabel = getCurrencyLabel()
   const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
   const withSuffix = (value: string) =>
@@ -476,10 +491,43 @@ export function BalanceCell({ channel }: { channel: Channel }) {
   const inferenceStatusLabel =
     channel.type === CHANNEL_TYPE_SGLANG ? t('SGLang status') : t('vLLM status')
 
+  const refreshGlmUsage = async (openDialog: boolean) => {
+    if (glmRefreshing) {
+      return
+    }
+    setGlmRefreshing(true)
+    try {
+      const res = await getGlmUsageBatch([channel.id])
+      if (!res.success) {
+        throw createServerError(res, t('Failed to fetch usage'))
+      }
+      setGlmUsageResponse(res.data?.[channel.id] ?? null)
+      void queryClient.invalidateQueries({
+        queryKey: channelsQueryKeys.glmUsagesPrefix(),
+      })
+      if (openDialog) {
+        setGlmUsageOpen(true)
+      }
+    } catch (error) {
+      handleServerError(error, t('Failed to fetch usage'))
+    } finally {
+      setGlmRefreshing(false)
+    }
+  }
+
   const handleClickUpdate = async () => {
     if (isInferenceChannel) {
       setCurrentRow(channel)
       setOpen('inference-status')
+      return
+    }
+    if (isGlmChannel) {
+      if (glmUsage) {
+        setGlmUsageResponse(glmUsage)
+        setGlmUsageOpen(true)
+        return
+      }
+      await refreshGlmUsage(true)
       return
     }
     if (isUpdating) {
@@ -558,7 +606,62 @@ export function BalanceCell({ channel }: { channel: Channel }) {
     if (usedPercent >= 70) remainingBadgeVariant = 'warning'
     if (usedPercent >= 90) remainingBadgeVariant = 'danger'
   }
-  const balanceClickable = !isInferenceChannel && balanceQueryable
+  const glmBadgeText = getGlmBadgeSegments(glmUsage)
+    .map((segment) => {
+      const value = segment.remaining != null ? `${segment.remaining}%` : '--'
+      return `${t(segment.labelKey)} ${value}`
+    })
+    .join(' · ')
+  let glmTooltipContent: ReactNode | null = null
+  if (isGlmChannel) {
+    if (isUpdating) {
+      remainingBadgeLabel = t('Updating...')
+      remainingBadgeVariant = 'neutral'
+    } else if (glmUsage === undefined) {
+      remainingBadgeVariant = 'neutral'
+      if (glmUsageContext?.isLoading) {
+        remainingBadgeLabel = t('Loading...')
+        glmTooltipContent = <p>{t('Loading GLM usage...')}</p>
+      } else {
+        remainingBadgeLabel = glmBadgeText
+        glmTooltipContent = <p>{t('Click to view GLM usage')}</p>
+      }
+    } else if (!glmUsage.success) {
+      remainingBadgeLabel = glmBadgeText
+      remainingBadgeVariant = 'warning'
+      glmTooltipContent = (
+        <>
+          <p>{t(glmUsage.message || 'Failed to fetch usage')}</p>
+          <p>{t('Click to view GLM usage')}</p>
+        </>
+      )
+    } else {
+      remainingBadgeLabel = glmBadgeText
+      const worst = getWorstGlmRemainingPercent(glmUsage)
+      remainingBadgeVariant =
+        worst == null ? 'neutral' : getGlmRemainingVariant(worst)
+      const tooltipLines: ReactNode[] = []
+      if (glmUsage.five_h) {
+        tooltipLines.push(
+          <p key='five-h'>
+            {`${t('5h')} ${glmUsage.five_h.remaining_pct}% · ${t('Reset at:')} ${formatTimestampToDate(Math.floor(glmUsage.five_h.next_reset_ms / 1000))}`}
+          </p>
+        )
+      }
+      if (glmUsage.weekly) {
+        tooltipLines.push(
+          <p key='weekly'>
+            {`${t('Wk')} ${glmUsage.weekly.remaining_pct}% · ${t('Reset at:')} ${formatTimestampToDate(Math.floor(glmUsage.weekly.next_reset_ms / 1000))}`}
+          </p>
+        )
+      }
+      tooltipLines.push(<p key='hint'>{t('Click to view GLM usage')}</p>)
+      glmTooltipContent = tooltipLines
+    }
+  }
+
+  const balanceClickable =
+    isGlmChannel || (!isInferenceChannel && balanceQueryable)
   const remainingBadge = (
     <StatusBadge
       label={remainingBadgeLabel}
@@ -571,7 +674,8 @@ export function BalanceCell({ channel }: { channel: Channel }) {
       onClick={balanceClickable ? handleClickUpdate : undefined}
     />
   )
-  const balanceQueryHint = balanceClickable && channel.type !== 57
+  const balanceQueryHint =
+    !isGlmChannel && balanceClickable && channel.type !== 57
 
   return (
     <TooltipProvider>
@@ -612,14 +716,18 @@ export function BalanceCell({ channel }: { channel: Channel }) {
             }
           />
           <TooltipContent className='flex-col items-start'>
-            <p>{remainingTooltipLabel}</p>
-            {sensitiveVisible && balanceQueryHint && (
-              <ChannelBalanceDetails
-                result={detail}
-                updatedTime={channel.balance_updated_time}
-              />
+            {glmTooltipContent ?? (
+              <>
+                <p>{remainingTooltipLabel}</p>
+                {sensitiveVisible && balanceQueryHint && (
+                  <ChannelBalanceDetails
+                    result={detail}
+                    updatedTime={channel.balance_updated_time}
+                  />
+                )}
+                {balanceQueryHint && <p>{t('Click to update balance')}</p>}
+              </>
             )}
-            {balanceQueryHint && <p>{t('Click to update balance')}</p>}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -650,6 +758,17 @@ export function BalanceCell({ channel }: { channel: Channel }) {
           }
         }}
         isRefreshing={isUpdating}
+      />
+      <GlmUsageDialog
+        open={glmUsageOpen}
+        onOpenChange={setGlmUsageOpen}
+        channelName={channel.name}
+        channelId={channel.id}
+        channelDisplayName={sensitiveVisible ? undefined : SENSITIVE_MASK}
+        channelDisplayId={sensitiveVisible ? undefined : SENSITIVE_MASK}
+        response={glmUsageResponse}
+        onRefresh={() => refreshGlmUsage(false)}
+        isRefreshing={glmRefreshing}
       />
       {rawBalanceResponse !== null && (
         <BalanceQueryDialog
