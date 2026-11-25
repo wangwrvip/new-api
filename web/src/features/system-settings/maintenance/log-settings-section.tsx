@@ -50,6 +50,8 @@ import { ServerLogFiles } from './server-log-files'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  RequestPreviewEnabled: z.boolean(),
+  RequestPreviewMaxTokens: z.number().int().min(1).max(2000),
   log_setting: z.object({
     user_export_enabled: z.boolean(),
     max_range_days: z.number().int().min(1),
@@ -64,6 +66,8 @@ type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 type LogSettingsSectionProps = {
   defaultValues: {
     LogConsumeEnabled: boolean
+    RequestPreviewEnabled?: boolean
+    RequestPreviewMaxTokens?: number
     'log_setting.user_export_enabled': boolean
     'log_setting.max_range_days': number
     'system_task_setting.retention_days': number
@@ -79,6 +83,9 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   const formDefaults = useMemo<LogSettingsFormValues>(
     () => ({
       LogConsumeEnabled: props.defaultValues.LogConsumeEnabled,
+      RequestPreviewEnabled: props.defaultValues.RequestPreviewEnabled ?? true,
+      RequestPreviewMaxTokens:
+        props.defaultValues.RequestPreviewMaxTokens ?? 200,
       log_setting: {
         user_export_enabled:
           props.defaultValues['log_setting.user_export_enabled'],
@@ -103,6 +110,8 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
   const onSubmit = async (values: LogSettingsFormValues) => {
     const changes = [
       ['LogConsumeEnabled', values.LogConsumeEnabled],
+      ['RequestPreviewEnabled', values.RequestPreviewEnabled],
+      ['RequestPreviewMaxTokens', values.RequestPreviewMaxTokens],
       [
         'log_setting.user_export_enabled',
         values.log_setting.user_export_enabled,
@@ -113,8 +122,18 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
         values.system_task_setting.retention_days,
       ],
     ] as const
+    const baseline = {
+      LogConsumeEnabled: formDefaults.LogConsumeEnabled,
+      RequestPreviewEnabled: formDefaults.RequestPreviewEnabled,
+      RequestPreviewMaxTokens: formDefaults.RequestPreviewMaxTokens,
+      'log_setting.user_export_enabled':
+        formDefaults.log_setting.user_export_enabled,
+      'log_setting.max_range_days': formDefaults.log_setting.max_range_days,
+      'system_task_setting.retention_days':
+        formDefaults.system_task_setting.retention_days,
+    }
     for (const [key, value] of changes) {
-      if (value === props.defaultValues[key]) continue
+      if (value === baseline[key]) continue
       await updateOption.mutateAsync({ key, value })
     }
   }
@@ -160,6 +179,56 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
               )}
             />
           </div>
+
+          <SettingsFormGrid>
+            <FormField
+              control={form.control}
+              name='RequestPreviewEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Enable request preview')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Store the first tokens of each text request for admin review in the log details. Helps detect abusive or illegitimate requests.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='RequestPreviewMaxTokens'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Preview Token Limit')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      max={2000}
+                      step={1}
+                      {...safeNumberFieldProps(field)}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Maximum number of tokens of the request text stored per log entry (1–2000).'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </SettingsFormGrid>
 
           <Separator />
 

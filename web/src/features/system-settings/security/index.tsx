@@ -39,6 +39,9 @@ const defaultSecuritySettings: SecuritySettings = {
   'fetch_setting.allowed_ports': [],
   'fetch_setting.apply_ip_filter_for_domain': false,
   'token_setting.max_user_tokens': 1000,
+  'context_limit_setting.enabled': false,
+  'context_limit_setting.default_max_prompt_tokens': 0,
+  'context_limit_setting.model_max_prompt_tokens': '{}',
 }
 
 export function SecuritySettings() {

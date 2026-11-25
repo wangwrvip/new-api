@@ -383,6 +383,8 @@ export type OperationsSettings = {
   WorkerValidKey: string
   WorkerAllowHttpImageRequestEnabled: boolean
   LogConsumeEnabled: boolean
+  RequestPreviewEnabled: boolean
+  RequestPreviewMaxTokens: number
   'log_setting.user_export_enabled': boolean
   'log_setting.max_range_days': number
   'system_task_setting.retention_days': number
@@ -415,6 +417,9 @@ export type SecuritySettings = {
   'fetch_setting.allowed_ports': number[]
   'fetch_setting.apply_ip_filter_for_domain': boolean
   'token_setting.max_user_tokens': number
+  'context_limit_setting.enabled': boolean
+  'context_limit_setting.default_max_prompt_tokens': number
+  'context_limit_setting.model_max_prompt_tokens': string
 }
 
 export type UpstreamChannel = {
