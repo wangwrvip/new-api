@@ -85,6 +85,16 @@ func (a *ResponsesUsageAccumulator) Observe(event *dto.ResponsesStreamResponse, 
 	}
 }
 
+// OutputText returns the accumulated model output text (content, reasoning,
+// function-call arguments, refusal) used for the missing-usage estimate. The
+// consume log's response preview reads it from the same accumulation point.
+func (a *ResponsesUsageAccumulator) OutputText() string {
+	if a == nil {
+		return ""
+	}
+	return a.outputText.String()
+}
+
 func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 	if a.finished {
 		return a.usage

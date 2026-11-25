@@ -268,6 +268,10 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	})
 	info.StreamStatus.RequireTerminal()
 
+	// Response preview: the accumulated text shared by every Gemini stream
+	// variant (Chat / native / Responses).
+	info.SetResponsePreview(responseText.String())
+
 	if !hasBillableUsageMetadata {
 		if info.ReceivedResponseCount > 0 {
 			usage = service.ResponseText2Usage(c, responseText.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
@@ -426,6 +430,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	grounding.observe(&geminiResponse)
 	grounding.commit(info)
 	countGeminiBillableFunctionCalls(info, &geminiResponse)
+	info.SetResponsePreview(geminiResponseUsageText(&geminiResponse))
 	if len(geminiResponse.Candidates) == 0 {
 		usage := buildUsageFromGeminiResponse(c, info, &geminiResponse)
 

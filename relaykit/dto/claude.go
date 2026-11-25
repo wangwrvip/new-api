@@ -327,56 +327,66 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	for _, message := range c.Messages {
 		tokenCountMeta.MessagesCount++
 		texts = append(texts, message.Role)
+		var userTexts []string
 		if message.IsStringContent() {
 			content := message.GetStringContent()
 			if content != "" {
 				texts = append(texts, content)
+				if message.Role == "user" {
+					userTexts = append(userTexts, content)
+				}
 			}
-			continue
-		}
-
-		content, _ := message.ParseContent()
-		for _, media := range content {
-			switch media.Type {
-			case "text":
-				texts = append(texts, media.GetText())
-			case "image":
-				if source := media.ToFileSource(); source != nil {
-					fileMeta = append(fileMeta, &types.FileMeta{
-						FileType: types.FileTypeImage,
-						Source:   source,
-					})
-				}
-			case "tool_use":
-				if media.Name != "" {
-					texts = append(texts, media.Name)
-				}
-				if media.Input != nil {
-					b, _ := kitutil.Marshal(media.Input)
-					texts = append(texts, string(b))
-				}
-			case "tool_result":
-				// Count tool output as the text the model reads; JSON-encoding it
-				// would escape newlines and quotes and count image base64 as text.
-				if media.IsStringContent() {
-					texts = append(texts, media.GetStringContent())
-					break
-				}
-				for _, part := range media.ParseMediaContent() {
-					if source := part.ToFileSource(); source != nil {
-						fileType := types.FileTypeFile
-						if part.Type == "image" {
-							fileType = types.FileTypeImage
-						}
-						fileMeta = append(fileMeta, &types.FileMeta{FileType: fileType, Source: source})
-					} else if part.Type == "text" {
-						texts = append(texts, part.GetText())
-					} else {
-						b, _ := kitutil.Marshal(part)
+		} else {
+			content, _ := message.ParseContent()
+			for _, media := range content {
+				switch media.Type {
+				case "text":
+					texts = append(texts, media.GetText())
+					if message.Role == "user" {
+						userTexts = append(userTexts, media.GetText())
+					}
+				case "image":
+					if source := media.ToFileSource(); source != nil {
+						fileMeta = append(fileMeta, &types.FileMeta{
+							FileType: types.FileTypeImage,
+							Source:   source,
+						})
+					}
+				case "tool_use":
+					if media.Name != "" {
+						texts = append(texts, media.Name)
+					}
+					if media.Input != nil {
+						b, _ := kitutil.Marshal(media.Input)
 						texts = append(texts, string(b))
+					}
+				case "tool_result":
+					// Count tool output as the text the model reads; JSON-encoding it
+					// would escape newlines and quotes and count image base64 as text.
+					if media.IsStringContent() {
+						texts = append(texts, media.GetStringContent())
+						break
+					}
+					for _, part := range media.ParseMediaContent() {
+						if source := part.ToFileSource(); source != nil {
+							fileType := types.FileTypeFile
+							if part.Type == "image" {
+								fileType = types.FileTypeImage
+							}
+							fileMeta = append(fileMeta, &types.FileMeta{FileType: fileType, Source: source})
+						} else if part.Type == "text" {
+							texts = append(texts, part.GetText())
+						} else {
+							b, _ := kitutil.Marshal(part)
+							texts = append(texts, string(b))
+						}
 					}
 				}
 			}
+		}
+		// The last user message wins; a later user message replaces an earlier one.
+		if message.Role == "user" && len(userTexts) > 0 {
+			tokenCountMeta.LastUserMessage = strings.Join(userTexts, "\n")
 		}
 	}
 

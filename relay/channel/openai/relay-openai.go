@@ -146,6 +146,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	info.StreamStatus.RequireTerminal()
 
+	// Response preview: the accumulated stream output (content + reasoning).
+	info.SetResponsePreview(responseTextBuilder.String())
+
 	// 处理最后的响应
 	shouldSendLastResp := true
 	if err := handleLastResponse(lastStreamData, &responseId, &createAt, &systemFingerprint, &model, &usage,
@@ -299,6 +302,15 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		}
 	}
 	info.ApplyVendorToolUsage(responseBody)
+
+	// Response preview: non-stream text (content + reasoning), matching the
+	// stream accumulator's scope.
+	var previewText strings.Builder
+	for _, choice := range simpleResponse.Choices {
+		previewText.WriteString(choice.Message.StringContent())
+		previewText.WriteString(choice.Message.GetReasoningContent())
+	}
+	info.SetResponsePreview(previewText.String())
 
 	forceFormat := false
 	if info.ChannelSetting.ForceFormat {

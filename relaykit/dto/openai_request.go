@@ -231,6 +231,7 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 				texts = append(texts, *message.Name)
 			}
 			arrayContent := message.ParseContent()
+			var userTexts []string
 			for _, m := range arrayContent {
 				source := m.ToFileSource()
 				if source != nil {
@@ -251,7 +252,14 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					fileMeta = append(fileMeta, meta)
 				} else if m.Type == ContentTypeText {
 					texts = append(texts, m.Text)
+					if message.Role == "user" {
+						userTexts = append(userTexts, m.Text)
+					}
 				}
+			}
+			// The last user message wins; a later user message replaces an earlier one.
+			if message.Role == "user" && len(userTexts) > 0 {
+				tokenCountMeta.LastUserMessage = strings.Join(userTexts, "\n")
 			}
 		}
 		// Assistant tool calls replayed in agent loops are part of the prompt.
@@ -1190,11 +1198,61 @@ func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
 		texts = append(texts, string(r.Tools))
 	}
 
-	return &types.TokenCountMeta{
+	meta := &types.TokenCountMeta{
 		CombineText: strings.Join(texts, "\n"),
 		Files:       fileMeta,
 		MaxTokens:   int(lo.FromPtrOr(r.MaxOutputTokens, uint(0))),
 	}
+	meta.LastUserMessage = r.lastUserMessage()
+	return meta
+}
+
+// lastUserMessage returns the text of the last role=user input message (text
+// parts joined by newline). A string input is the user message itself; empty
+// when the input carries no user message.
+func (r *OpenAIResponsesRequest) lastUserMessage() string {
+	if r.Input == nil {
+		return ""
+	}
+	if kitutil.GetJsonType(r.Input) == "string" {
+		var text string
+		_ = kitutil.Unmarshal(r.Input, &text)
+		return text
+	}
+	if kitutil.GetJsonType(r.Input) != "array" {
+		return ""
+	}
+	var inputs []Input
+	if err := kitutil.Unmarshal(r.Input, &inputs); err != nil {
+		return ""
+	}
+	// Search from the end so the last user message wins.
+	for i := len(inputs) - 1; i >= 0; i-- {
+		if inputs[i].Role != "user" {
+			continue
+		}
+		var texts []string
+		if kitutil.GetJsonType(inputs[i].Content) == "string" {
+			var text string
+			if kitutil.Unmarshal(inputs[i].Content, &text) == nil && text != "" {
+				texts = append(texts, text)
+			}
+		} else if kitutil.GetJsonType(inputs[i].Content) == "array" {
+			var parts []MediaInput
+			if kitutil.Unmarshal(inputs[i].Content, &parts) != nil {
+				continue
+			}
+			for _, part := range parts {
+				if part.Type == "input_text" && part.Text != "" {
+					texts = append(texts, part.Text)
+				}
+			}
+		}
+		if len(texts) > 0 {
+			return strings.Join(texts, "\n")
+		}
+	}
+	return ""
 }
 
 func (r *OpenAIResponsesRequest) IsStream(c *http.Request) bool {

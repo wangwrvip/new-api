@@ -351,6 +351,9 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 		return nil, err
 	}
 
+	// Response preview: the full accumulated stream output (content + thinking).
+	info.SetResponsePreview(claudeInfo.ResponseText.String())
+
 	HandleStreamFinalResponse(c, info, claudeInfo)
 	return claudeInfo.Usage, nil
 }
@@ -383,6 +386,19 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Usage.GetCacheCreation5mTokens()
 		claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Usage.GetCacheCreation1hTokens()
 	}
+	// Response preview: text blocks of the non-stream response, matching the
+	// stream accumulator's scope (thinking blocks included).
+	var previewText strings.Builder
+	for _, block := range claudeResponse.Content {
+		if block.Text != nil {
+			previewText.WriteString(*block.Text)
+		}
+		if block.Thinking != nil {
+			previewText.WriteString(*block.Thinking)
+		}
+	}
+	info.SetResponsePreview(previewText.String())
+
 	var responseData []byte
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:

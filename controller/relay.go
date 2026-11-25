@@ -27,6 +27,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -181,6 +182,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	if relayFormat == types.RelayFormatClaude && relayInfo.IsStream && generalSettings.PingIntervalEnabled {
 		stopKeepAlive := helper.StartStreamKeepAlive(c, time.Duration(generalSettings.PingIntervalSeconds)*time.Second)
 		defer stopKeepAlive()
+	}
+
+	// Request preview: when enabled and consume logs are written, keep the
+	// first N tokens of the request text and the last user message (what the
+	// user actually typed) for the log owner and admins.
+	if setting.RequestPreviewEnabled() && common.LogConsumeEnabled {
+		if meta := request.GetTokenCountMeta(); meta != nil && meta.CombineText != "" {
+			relayInfo.RequestPreview = service.TruncateTextToTokens(meta.CombineText, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
+			relayInfo.RequestPreviewUser = service.TruncateTextToTokens(meta.LastUserMessage, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
+		}
 	}
 
 	if newAPIError = relay.PrepareRequestBilling(c, relayInfo); newAPIError != nil {

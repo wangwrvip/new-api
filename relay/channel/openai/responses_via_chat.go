@@ -47,6 +47,7 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if !ok {
 		return nil, types.NewOpenAIError(fmt.Errorf("expected OpenAI responses response, got %T", convertResult.Value), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	info.SetResponsePreview(service.ExtractOutputTextFromResponses(responsesResp))
 	usage := convertResult.Usage
 	if usage == nil || usage.TotalTokens == 0 {
 		text := service.ExtractOutputTextFromResponses(responsesResp)
@@ -180,6 +181,9 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			}
 		}
 	})
+
+	// Response preview: the stream state's accumulated output text.
+	info.SetResponsePreview(state.UsageText())
 
 	if streamErr != nil {
 		return nil, streamErr

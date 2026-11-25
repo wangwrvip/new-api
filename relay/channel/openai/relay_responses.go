@@ -36,6 +36,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	}
 
 	info.ObserveResponseModel(responsesResponse.Model)
+	info.SetResponsePreview(service.ExtractOutputTextFromResponses(&responsesResponse))
 	responseBody = rewriteSGLangResponsesCreatedAt(info, responseBody, "created_at", responsesResponse.CreatedAt)
 
 	// 写入新的 response body
@@ -101,6 +102,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	common.SetContextKey(c, constant.ContextKeyResponseStreamStatus, info.StreamStatus)
 	info.StreamStatus.RequireTerminal()
+	// Response preview: the accumulator's output text, so interrupted streams
+	// still show the output the client received.
+	info.SetResponsePreview(accumulator.OutputText())
 	return accumulator.Finish(), nil
 }
 

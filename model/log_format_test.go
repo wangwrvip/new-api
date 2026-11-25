@@ -242,3 +242,50 @@ func TestLogFormattingPreservesLargeIntegerLexemes(t *testing.T) {
 		assert.Equal(t, unprivileged, adminLogs[0].Other)
 	})
 }
+
+// TestFormatUserLogsHoistsLegacyPreviewsFromAdminInfo verifies that preview
+// fields written by older versions under admin_info (request_preview,
+// request_preview_user, response_preview) are hoisted to the top level of
+// other before admin_info is stripped, so log owners keep seeing their own
+// request/output previews for historical consume logs.
+func TestFormatUserLogsHoistsLegacyPreviewsFromAdminInfo(t *testing.T) {
+	other := common.MapToJsonStr(map[string]any{
+		"model_price": 0.004,
+		"admin_info": map[string]any{
+			"use_channel":          []any{1},
+			"request_preview":      "旧的请求预览",
+			"request_preview_user": "旧的用户输入",
+			"response_preview":     "旧的输出预览",
+		},
+	})
+	logs := []*Log{{Other: other}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	_, hasAdminInfo := parsed["admin_info"]
+	require.False(t, hasAdminInfo, "admin_info must still be stripped")
+	require.Equal(t, "旧的请求预览", parsed["request_preview"])
+	require.Equal(t, "旧的用户输入", parsed["request_preview_user"])
+	require.Equal(t, "旧的输出预览", parsed["response_preview"])
+	require.NotContains(t, parsed, "use_channel", "non-preview admin fields stay hidden")
+}
+
+// TestFormatUserLogsKeepsTopLevelPreviews verifies top-level previews written
+// by the current version pass through the user formatter untouched.
+func TestFormatUserLogsKeepsTopLevelPreviews(t *testing.T) {
+	other := common.MapToJsonStr(map[string]any{
+		"model_price":      0.004,
+		"request_preview":  "顶层请求预览",
+		"response_preview": "顶层输出预览",
+	})
+	logs := []*Log{{Other: other}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, "顶层请求预览", parsed["request_preview"])
+	require.Equal(t, "顶层输出预览", parsed["response_preview"])
+}

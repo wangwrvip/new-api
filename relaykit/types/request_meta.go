@@ -18,13 +18,17 @@ const (
 )
 
 type TokenCountMeta struct {
-	TokenType     TokenType   `json:"token_type,omitempty"`     // Type of tokens used in the request
-	CombineText   string      `json:"combine_text,omitempty"`   // Combined text from all messages
-	ToolsCount    int         `json:"tools_count,omitempty"`    // Number of tools used
-	NameCount     int         `json:"name_count,omitempty"`     // Number of names in the request
-	MessagesCount int         `json:"messages_count,omitempty"` // Number of messages in the request
-	Files         []*FileMeta `json:"files,omitempty"`          // List of files, each with type and content
-	MaxTokens     int         `json:"max_tokens,omitempty"`     // Maximum tokens allowed in the request
+	TokenType   TokenType `json:"token_type,omitempty"`   // Type of tokens used in the request
+	CombineText string    `json:"combine_text,omitempty"` // Combined text from all messages
+	// LastUserMessage is the text of the last role=user message (multiple text
+	// parts joined by newline). The log request preview shows it as what the
+	// user actually typed; empty when the request has no user message.
+	LastUserMessage string      `json:"last_user_message,omitempty"`
+	ToolsCount      int         `json:"tools_count,omitempty"`    // Number of tools used
+	NameCount       int         `json:"name_count,omitempty"`     // Number of names in the request
+	MessagesCount   int         `json:"messages_count,omitempty"` // Number of messages in the request
+	Files           []*FileMeta `json:"files,omitempty"`          // List of files, each with type and content
+	MaxTokens       int         `json:"max_tokens,omitempty"`     // Maximum tokens allowed in the request
 
 	ImagePriceRatio float64            `json:"image_ratio,omitempty"`    // Ratio for image size, if applicable
 	BillingRatios   map[string]float64 `json:"billing_ratios,omitempty"` // Validated request multipliers used by pre-consume billing

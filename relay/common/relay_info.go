@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -183,6 +184,25 @@ type RelayInfo struct {
 	// supported single-request bound (or NaN fallback) while computing this request's charge.
 	// It is surfaced onto the consume/task log's admin_info for auditing.
 	QuotaClamp *common.QuotaClamp
+
+	// RequestPreview holds the first N tokens of the request text (text-bearing
+	// relay formats only). Surfaced onto the consume log's other.request_preview
+	// for the log owner and admins; empty when preview is disabled or there is
+	// no text.
+	RequestPreview string
+
+	// RequestPreviewUser holds the last user message of the request (what the
+	// user actually typed), truncated to N tokens. Surfaced onto the consume
+	// log's other.request_preview_user; empty when preview is disabled or the
+	// request carries no user message.
+	RequestPreviewUser string
+
+	// ResponsePreview holds the first responsePreviewMaxRunes characters of the
+	// model's text output (content plus reasoning, text-bearing relay formats
+	// only). Surfaced onto the consume log's other.response_preview for the log
+	// owner and admins; empty when consume logging is disabled or there is no
+	// text.
+	ResponsePreview string
 
 	// TieredBillingSnapshot captures tiered billing rules at pre-consume time.
 	// Auto-group retries refresh its group-dependent fields before each attempt
@@ -859,6 +879,32 @@ func (info *RelayInfo) GetEstimatePromptTokens() int {
 		return 0
 	}
 	return info.estimatePromptTokens
+}
+
+// responsePreviewMaxRunes caps the response preview at 1024 characters.
+const responsePreviewMaxRunes = 1024
+
+// SetResponsePreview records the first responsePreviewMaxRunes characters of
+// the model's output text on the relay info for the consume log's
+// other.response_preview (log owner + admin visible). It is skipped entirely
+// when consume logging is disabled. Callers pass the full accumulated output
+// text; the cut is rune-safe so multi-byte text never splits mid-character.
+func (info *RelayInfo) SetResponsePreview(text string) {
+	if info == nil || !common.LogConsumeEnabled || text == "" {
+		return
+	}
+	if utf8.RuneCountInString(text) <= responsePreviewMaxRunes {
+		info.ResponsePreview = text
+		return
+	}
+	count := 0
+	for i := range text {
+		if count == responsePreviewMaxRunes {
+			info.ResponsePreview = text[:i]
+			return
+		}
+		count++
+	}
 }
 
 // ---------------------------------------------------------------------------

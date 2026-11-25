@@ -25,6 +25,41 @@ var legacySensitiveLogOtherKeys = []string{
 	"reject_reason",
 }
 
+// legacyPreviewLogOtherKeys are the request/output preview fields older
+// versions wrote under other.admin_info. They belong to the log owner, so the
+// user projection hoists them to the top level before admin_info is stripped;
+// current versions write them at the top level directly.
+var legacyPreviewLogOtherKeys = []string{
+	"request_preview",
+	"request_preview_user",
+	"response_preview",
+}
+
+// hoistLegacyPreviews copies preview fields out of admin_info to the top level
+// when they are absent there, leaving every other admin field scoped.
+// RawMessage keeps large integers elsewhere in admin_info intact.
+func hoistLegacyPreviews(values map[string]json.RawMessage) bool {
+	rawAdminInfo, exists := values[logOtherAdminInfoKey]
+	if !exists {
+		return false
+	}
+	var adminInfo map[string]json.RawMessage
+	if err := common.Unmarshal(rawAdminInfo, &adminInfo); err != nil || adminInfo == nil {
+		return false
+	}
+	changed := false
+	for _, key := range legacyPreviewLogOtherKeys {
+		if _, hasTop := values[key]; hasTop {
+			continue
+		}
+		if preview, ok := adminInfo[key]; ok {
+			values[key] = preview
+			changed = true
+		}
+	}
+	return changed
+}
+
 type logOtherVisibility int
 
 const (
@@ -244,6 +279,9 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 
 	changed := false
 	if visibility == logOtherVisibilityUser {
+		if hoistLegacyPreviews(values) {
+			changed = true
+		}
 		for _, key := range []string{logOtherAdminInfoKey, logOtherRootInfoKey, logOtherAuditInfoKey} {
 			if _, exists := values[key]; exists {
 				delete(values, key)

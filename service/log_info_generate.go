@@ -126,6 +126,17 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendRelayLogAdminInfo(ctx, relayInfo, other)
+	// Previews are visible to the log owner, so they stay at the top level of
+	// other instead of the admin-only scope.
+	if relayInfo.RequestPreview != "" {
+		other.SetPublic("request_preview", relayInfo.RequestPreview)
+	}
+	if relayInfo.RequestPreviewUser != "" {
+		other.SetPublic("request_preview_user", relayInfo.RequestPreviewUser)
+	}
+	if relayInfo.ResponsePreview != "" {
+		other.SetPublic("response_preview", relayInfo.ResponsePreview)
+	}
 	AppendResponseModelLogInfo(relayInfo, other)
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
