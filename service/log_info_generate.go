@@ -144,6 +144,14 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 			other.SetPublic("response_preview", relayInfo.ResponsePreview)
 		}
 	}
+	if relayInfo != nil {
+		// The locally estimated input token count is recorded for billing
+		// reconciliation against the upstream-reported prompt tokens. A zero
+		// estimate means none was made (CountToken off), so the key is absent.
+		if estimated := relayInfo.GetEstimatePromptTokens(); estimated > 0 {
+			other.SetPublic("estimated_prompt_tokens", estimated)
+		}
+	}
 	AppendResponseModelLogInfo(relayInfo, other)
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)

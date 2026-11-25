@@ -272,6 +272,24 @@ func TestFormatUserLogsHoistsLegacyPreviewsFromAdminInfo(t *testing.T) {
 	require.NotContains(t, parsed, "use_channel", "non-preview admin fields stay hidden")
 }
 
+// TestLogFormatKeepsEstimatedPromptTokens verifies the public
+// estimated_prompt_tokens field survives the user-visible projection, so log
+// owners can reconcile the local estimate against the upstream token count.
+func TestLogFormatKeepsEstimatedPromptTokens(t *testing.T) {
+	other := common.MapToJsonStr(map[string]any{
+		"model_price":             0.004,
+		"estimated_prompt_tokens": 33126,
+	})
+	logs := []*Log{{Other: other}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Contains(t, parsed, "estimated_prompt_tokens")
+	require.Contains(t, logs[0].Other, `"estimated_prompt_tokens":33126`)
+}
+
 // TestFormatUserLogsKeepsTopLevelPreviews verifies top-level previews written
 // by the current version pass through the user formatter untouched.
 func TestFormatUserLogsKeepsTopLevelPreviews(t *testing.T) {

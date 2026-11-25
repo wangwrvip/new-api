@@ -100,6 +100,33 @@ func TestGenerateTextOtherInfoPreviewsRespectPluginMask(t *testing.T) {
 	}
 }
 
+// TestGenerateTextOtherInfoWritesEstimatedPromptTokens verifies the local
+// input-token estimate lands in the public log scope for billing reconciliation
+// against the upstream-reported prompt tokens.
+func TestGenerateTextOtherInfoWritesEstimatedPromptTokens(t *testing.T) {
+	ctx := newTextOtherInfoTestContext()
+	relayInfo := newTextOtherInfoTestRelayInfo()
+	relayInfo.SetEstimatePromptTokens(33126)
+
+	other := GenerateTextOtherInfo(ctx, relayInfo, 1, 1, 1, 0, 0, 0, 1).Snapshot()
+
+	require.Equal(t, 33126, other["estimated_prompt_tokens"])
+}
+
+// TestGenerateTextOtherInfoOmitsZeroEstimate verifies no estimate key is
+// written when token estimation did not run (CountToken off), so the log never
+// claims an estimate of 0.
+func TestGenerateTextOtherInfoOmitsZeroEstimate(t *testing.T) {
+	ctx := newTextOtherInfoTestContext()
+	relayInfo := newTextOtherInfoTestRelayInfo()
+	relayInfo.SetEstimatePromptTokens(0)
+
+	other := GenerateTextOtherInfo(ctx, relayInfo, 1, 1, 1, 0, 0, 0, 1).Snapshot()
+
+	_, exists := other["estimated_prompt_tokens"]
+	require.False(t, exists, "estimated_prompt_tokens must not be written when the estimate is 0")
+}
+
 // TestGenerateTextOtherInfoOmitsEmptyPreviews verifies no preview keys are
 // written when the relay captured no preview text.
 func TestGenerateTextOtherInfoOmitsEmptyPreviews(t *testing.T) {
