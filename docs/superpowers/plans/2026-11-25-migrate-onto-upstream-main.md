@@ -594,26 +594,26 @@ git commit -m "feat: 日志请求与输出预览（所有者可见）"
 - Consumes: 上游 `tokenkit`（`tokenkit.Count` / `Estimate` / `ImageTokens`）与 `service.CountRequestToken` / `EstimateRequestToken`。
 - Produces: 迁移分支上 token 计数只有一套实现。
 
-- [ ] **Step 1: 确认本地 token 文件不存在**
+- [x] **Step 1: 确认本地 token 文件不存在**
 
 Run: `git ls-files service/tokenizer.go service/token_estimator.go`
 Expected: 无输出。
 
-- [ ] **Step 2: 确认 relaykit 计数增强未被携带**
+- [x] **Step 2: 确认 relaykit 计数增强未被携带**
 
 Run: `git diff origin/main --stat -- relaykit/dto`
 Expected: 只应出现 P2.5 新增的 `LastUserMessage` 相关改动；不应出现本地 codec 池、`token_count_meta_tools_test.go`、`GetTokenCountMeta` 的大段增强。
 
-- [ ] **Step 3: 确认模块接线**
+- [x] **Step 3: 确认模块接线**
 
 Run: `grep -n 'tokenkit' go.mod makefile`
 Expected: `replace github.com/QuantumNous/new-api/tokenkit => ./tokenkit` 与 `make test` 中的 tokenkit 测试均存在。
 
-- [ ] **Step 4: 确认敏感词能力按上游处理**
+- [x] **Step 4: 确认敏感词能力按上游处理**
 
 确认 `service/sensitive.go` 不存在、`controller/relay.go` 无 `service.CheckSensitiveText` 调用；上游已用 `model.MigrateSensitiveWords` 把旧敏感词迁移到 request-filter。不要恢复本地实现。
 
-- [ ] **Step 5: 三模块构建**
+- [x] **Step 5: 三模块构建**
 
 Run: `go build . && (cd relaykit && GOWORK=off go build ./...) && (cd tokenkit && GOWORK=off go build ./...)`
 Expected: 全绿。勾选 tasks.md 4.1。
