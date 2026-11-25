@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 const glmUsagePath = "/api/monitor/usage/quota/limit"
@@ -138,33 +139,44 @@ func fetchGlmChannelUsage(ctx context.Context, channel *model.Channel) glmUsageC
 
 	ctx, cancel := context.WithTimeout(ctx, glmUsageTimeout)
 	defer cancel()
+
+	// Use the channel transport settings so proxy, TLS, and HTTP policy match
+	// what the relay path uses for this channel.
+	setting := channel.GetSetting()
+	client, err := service.GetHttpClientWithProxySettings(setting.Proxy, setting)
+	if err != nil {
+		common.SysError(common.LogText("GLM usage: channel %d: failed to build http client: %s", channel.Id, err.Error()))
+		return glmUsageChannelResult{Message: "http client setup failed"}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, usageBase+glmUsagePath, nil)
 	if err != nil {
-		return glmUsageChannelResult{Message: err.Error()}
+		common.SysError(common.LogText("GLM usage: channel %d: failed to build request: %s", channel.Id, err.Error()))
+		return glmUsageChannelResult{Message: "request build failed"}
 	}
 	req.Header.Set("Authorization", strings.TrimSpace(channel.Key))
 	req.Header.Set("Accept-Language", "en-US,en")
 	req.Header.Set("Content-Type", "application/json")
 
-	client, err := service.GetHttpClientWithProxy(channel.GetSetting().Proxy)
-	if err != nil {
-		return glmUsageChannelResult{Message: err.Error()}
-	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return glmUsageChannelResult{Message: err.Error()}
+		common.SysError(common.LogText("GLM usage: channel %d: upstream request failed: %s", channel.Id, err.Error()))
+		return glmUsageChannelResult{Message: "upstream request failed"}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		common.SysError(common.LogText("GLM usage: channel %d: unexpected upstream status %d", channel.Id, resp.StatusCode))
 		return glmUsageChannelResult{Message: fmt.Sprintf("upstream status: %d", resp.StatusCode)}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return glmUsageChannelResult{Message: err.Error()}
+		common.SysError(common.LogText("GLM usage: channel %d: failed to read upstream response: %s", channel.Id, err.Error()))
+		return glmUsageChannelResult{Message: "upstream response read failed"}
 	}
 	data, err := parseGlmUsageResponse(body, time.Now().UnixMilli())
 	if err != nil {
-		return glmUsageChannelResult{Message: err.Error()}
+		common.SysError(common.LogText("GLM usage: channel %d: invalid upstream response: %s", channel.Id, err.Error()))
+		return glmUsageChannelResult{Message: "upstream response invalid"}
 	}
 	return glmUsageChannelResult{glmUsageData: data}
 }
@@ -203,7 +215,14 @@ func GetGlmChannelsUsage(c *gin.Context) {
 
 			result := func() glmUsageChannelResult {
 				channel, err := model.GetChannelById(id, true)
-				if err != nil || channel == nil {
+				if err != nil {
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						return glmUsageChannelResult{Message: "channel not found"}
+					}
+					common.SysError(common.LogText("GLM usage: failed to load channel %d: %s", id, err.Error()))
+					return glmUsageChannelResult{Message: "channel lookup failed"}
+				}
+				if channel == nil {
 					return glmUsageChannelResult{Message: "channel not found"}
 				}
 				if channel.Type != constant.ChannelTypeZhipu && channel.Type != constant.ChannelTypeZhipu_v4 {

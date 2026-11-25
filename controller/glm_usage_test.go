@@ -1,10 +1,24 @@
 package controller
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+
+	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // Live upstream payload shape (probed 2026-09-10):
@@ -119,4 +133,146 @@ func TestParseGlmUsageResponse(t *testing.T) {
 			assert.Equal(t, test.want, got)
 		})
 	}
+}
+
+func setupGlmUsageTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	previousDB := model.DB
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "glm-usage.db")+"?_pragma=busy_timeout(5000)"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Channel{}))
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		sqlDB, dbErr := db.DB()
+		if dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db
+}
+
+func callGlmChannelsUsage(t *testing.T, ids string) map[string]glmUsageChannelResult {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/channel/glm/usage?ids="+ids, nil)
+
+	GetGlmChannelsUsage(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool                             `json:"success"`
+		Data    map[string]glmUsageChannelResult `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	require.True(t, response.Success)
+	return response.Data
+}
+
+func TestFetchGlmChannelUsageUsesChannelTransportSettings(t *testing.T) {
+	var requests atomic.Int32
+	var authHeader atomic.Value
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		authHeader.Store(r.Header.Get("Authorization"))
+		if r.URL.Path != glmUsagePath {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(glmUsageLivePayload))
+	}))
+	defer server.Close()
+
+	// Self-signed httptest certificate: the request only succeeds when the
+	// channel's tls_insecure_skip_verify setting reaches the HTTP client.
+	setting := `{"tls_insecure_skip_verify":true}`
+	channel := &model.Channel{
+		Id:      1,
+		Type:    constant.ChannelTypeZhipu,
+		Key:     "sk-glm-transport-settings",
+		BaseURL: &server.URL,
+		Setting: &setting,
+	}
+
+	result := fetchGlmChannelUsage(context.Background(), channel)
+
+	require.Empty(t, result.Message)
+	assert.True(t, result.Success)
+	assert.Equal(t, "MAX", result.Level)
+	assert.Equal(t, int32(1), requests.Load())
+	assert.Equal(t, "sk-glm-transport-settings", authHeader.Load())
+}
+
+func TestGetGlmChannelsUsageRejectsMultiKeyChannel(t *testing.T) {
+	db := setupGlmUsageTestDB(t)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(glmUsageLivePayload))
+	}))
+	defer server.Close()
+
+	channel := &model.Channel{
+		Name:        "glm-multi-key",
+		Type:        constant.ChannelTypeZhipu,
+		Key:         "key-one\nkey-two",
+		BaseURL:     &server.URL,
+		ChannelInfo: model.ChannelInfo{IsMultiKey: true, MultiKeySize: 2},
+	}
+	require.NoError(t, db.Create(channel).Error)
+	id := strconv.Itoa(channel.Id)
+
+	data := callGlmChannelsUsage(t, id)
+	result, ok := data[id]
+	require.True(t, ok)
+	assert.False(t, result.Success)
+	assert.Equal(t, "multi-key channel is not supported", result.Message)
+	assert.Zero(t, requests.Load(), "multi-key channels must never reach the upstream")
+}
+
+func TestGetGlmChannelsUsageRejectsNonZhipuChannel(t *testing.T) {
+	db := setupGlmUsageTestDB(t)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(glmUsageLivePayload))
+	}))
+	defer server.Close()
+
+	channel := &model.Channel{
+		Name:    "glm-openai",
+		Type:    constant.ChannelTypeOpenAI,
+		Key:     "sk-openai",
+		BaseURL: &server.URL,
+	}
+	require.NoError(t, db.Create(channel).Error)
+	id := strconv.Itoa(channel.Id)
+
+	data := callGlmChannelsUsage(t, id)
+	result, ok := data[id]
+	require.True(t, ok)
+	assert.Equal(t, "channel type is not Zhipu", result.Message)
+	assert.Zero(t, requests.Load())
+}
+
+func TestGetGlmChannelsUsageKeepsFirstFiftyIDsOnly(t *testing.T) {
+	db := setupGlmUsageTestDB(t)
+	// P4.3 moves the frontend to batches; until then the handler silently
+	// truncates at 50, and this test pins that behavior.
+	const requestedIDs = 51
+	ids := make([]string, 0, requestedIDs)
+	for range requestedIDs {
+		channel := &model.Channel{Name: "glm-batch-cap", Type: constant.ChannelTypeOpenAI, Key: "sk-openai"}
+		require.NoError(t, db.Create(channel).Error)
+		ids = append(ids, strconv.Itoa(channel.Id))
+	}
+
+	data := callGlmChannelsUsage(t, strings.Join(ids, ","))
+
+	require.Len(t, data, 50)
+	for _, id := range ids[:50] {
+		assert.Contains(t, data, id)
+	}
+	assert.NotContains(t, data, ids[requestedIDs-1])
 }
