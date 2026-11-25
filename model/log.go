@@ -56,17 +56,23 @@ func sanitizeClickHouseLikePattern(input string) (string, error) {
 }
 
 type Log struct {
-	Id                int    `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
-	UserId            int    `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type"`
-	Type              int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content           string `json:"content"`
-	Username          string `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
-	TokenName         string `json:"token_name" gorm:"index;default:''"`
-	ModelName         string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0"`
-	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
+	Id               int    `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
+	UserId           int    `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
+	CreatedAt        int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type"`
+	Type             int    `json:"type" gorm:"index:idx_created_at_type"`
+	Content          string `json:"content"`
+	Username         string `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
+	TokenName        string `json:"token_name" gorm:"index;default:''"`
+	ModelName        string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Quota            int    `json:"quota" gorm:"default:0"`
+	PromptTokens     int    `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens int    `json:"completion_tokens" gorm:"default:0"`
+	// InputTokens/CacheTokens 是归一化的 token 维度（非缓存输入 / 缓存读+写合计），
+	// 供数据看板与使用报告聚合；prompt_tokens 保留各渠道原语义以兼容既有展示。
+	// CacheReadTokens 为缓存命中的读分量（命中率 = 读 / (输入+缓存)），旧数据为 0。
+	InputTokens       int    `json:"input_tokens" gorm:"default:0"`
+	CacheTokens       int    `json:"cache_tokens" gorm:"default:0"`
+	CacheReadTokens   int    `json:"cache_read_tokens" gorm:"default:0"`
 	UseTime           int    `json:"use_time" gorm:"default:0"`
 	IsStream          bool   `json:"is_stream"`
 	ChannelId         int    `json:"channel" gorm:"index"`
@@ -323,18 +329,25 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 }
 
 type RecordConsumeLogParams struct {
-	ChannelId        int               `json:"channel_id"`
-	PromptTokens     int               `json:"prompt_tokens"`
-	CompletionTokens int               `json:"completion_tokens"`
-	ModelName        string            `json:"model_name"`
-	TokenName        string            `json:"token_name"`
-	Quota            int               `json:"quota"`
-	Content          []*common.Message `json:"content"`
-	TokenId          int               `json:"token_id"`
-	UseTimeSeconds   int               `json:"use_time_seconds"`
-	IsStream         bool              `json:"is_stream"`
-	Group            string            `json:"group"`
-	Other            *LogOther         `json:"other"`
+	ChannelId        int `json:"channel_id"`
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	// InputTokens/CacheTokens 为可选的归一化维度：文本链路显式传入
+	// （InputTokens 不含缓存，CacheTokens 为读+写合计）；其余路径不传时
+	// 输入回退为 PromptTokens、缓存为 0，总量维持旧口径。
+	// CacheReadTokens 为缓存读分量，与 CacheTokens 同时传入。
+	InputTokens     int               `json:"input_tokens"`
+	CacheTokens     int               `json:"cache_tokens"`
+	CacheReadTokens int               `json:"cache_read_tokens"`
+	ModelName       string            `json:"model_name"`
+	TokenName       string            `json:"token_name"`
+	Quota           int               `json:"quota"`
+	Content         []*common.Message `json:"content"`
+	TokenId         int               `json:"token_id"`
+	UseTimeSeconds  int               `json:"use_time_seconds"`
+	IsStream        bool              `json:"is_stream"`
+	Group           string            `json:"group"`
+	Other           *LogOther         `json:"other"`
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
@@ -349,6 +362,13 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	createdAt := common.GetTimestamp()
+	// 归一化 token 维度与统一总量：未传维度时保持旧口径（prompt+completion）。
+	inputTokens := params.InputTokens
+	cacheTokens := params.CacheTokens
+	if inputTokens == 0 && cacheTokens == 0 {
+		inputTokens = params.PromptTokens
+	}
+	tokenUsed := inputTokens + cacheTokens + params.CompletionTokens
 	other := params.Other
 	content := other.setContent(params.Content)
 	otherStr := other.JSONString()
@@ -367,6 +387,9 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		Content:          content,
 		PromptTokens:     params.PromptTokens,
 		CompletionTokens: params.CompletionTokens,
+		InputTokens:      inputTokens,
+		CacheTokens:      cacheTokens,
+		CacheReadTokens:  params.CacheReadTokens,
 		TokenName:        params.TokenName,
 		ModelName:        params.ModelName,
 		Quota:            params.Quota,
@@ -403,7 +426,10 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			ModelName:           params.ModelName,
 			Quota:               params.Quota,
 			CreatedAt:           createdAt,
-			TokenUsed:           params.PromptTokens + params.CompletionTokens,
+			TokenUsed:           tokenUsed,
+			InputTokens:         inputTokens,
+			OutputTokens:        params.CompletionTokens,
+			CacheTokens:         cacheTokens,
 			CacheReadTokens:     int64(cacheReadTokens),
 			CacheCreationTokens: int64(cacheCreationTokens),
 			UseGroup:            params.Group,

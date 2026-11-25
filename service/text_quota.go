@@ -36,9 +36,15 @@ func appendToolSurchargeLogInfo(other *model.LogOther, items []ToolSurchargeItem
 }
 
 type textQuotaSummary struct {
-	PromptTokens           int
-	CompletionTokens       int
-	TotalTokens            int
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	// InputTokens 是归一化后的「非缓存输入」维度（看板/使用报告展示口径）。
+	// 各 usage 语义下 prompt_tokens 是否含缓存不同，这里统一为不含缓存。
+	InputTokens int
+	// CacheTokensTotal 是归一化后的「缓存」维度（读+写合计），供消费日志
+	// 与看板聚合使用；InputTokens + CacheTokensTotal + CompletionTokens 为统一总量。
+	CacheTokensTotal       int
 	CacheTokens            int
 	CacheCreationTokens    int
 	CacheCreationTokens5m  int
@@ -280,6 +286,20 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			}
 		}
 		summary.PromptTokens -= summary.CacheCreationTokens
+	}
+
+	// 归一化「缓存」维度（读+写合计）与「非缓存输入」维度：
+	// OpenAI 语义的 prompt 含缓存需要扣除；anthropic/legacy 语义的 prompt
+	// 本就不含缓存；OpenRouter+Claude 上面已扣除。
+	summary.CacheTokensTotal = summary.CacheTokens + cacheWriteTokensTotal(summary)
+	switch {
+	case isOpenRouterClaudeBilling, summary.IsClaudeUsageSemantic, legacyClaudeDerived:
+		summary.InputTokens = summary.PromptTokens
+	default:
+		summary.InputTokens = summary.PromptTokens - summary.CacheTokens - cacheWriteTokensTotal(summary)
+		if summary.InputTokens < 0 {
+			summary.InputTokens = 0
+		}
 	}
 
 	dPromptTokens := decimal.NewFromInt(int64(summary.PromptTokens))
@@ -546,15 +566,19 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     summary.PromptTokens,
 		CompletionTokens: summary.CompletionTokens,
-		ModelName:        logModel,
-		TokenName:        summary.TokenName,
-		Quota:            summary.Quota,
-		Content:          extraContent,
-		TokenId:          relayInfo.TokenId,
-		UseTimeSeconds:   int(summary.UseTimeSeconds),
-		IsStream:         relayInfo.IsStream,
-		Group:            relayInfo.UsingGroup,
-		Other:            other,
+		InputTokens:      summary.InputTokens,
+		CacheTokens:      summary.CacheTokensTotal,
+		// 缓存命中的读分量：CacheTokensTotal 为读+写合计，命中率需要单列读分量
+		CacheReadTokens: summary.CacheTokens,
+		ModelName:       logModel,
+		TokenName:       summary.TokenName,
+		Quota:           summary.Quota,
+		Content:         extraContent,
+		TokenId:         relayInfo.TokenId,
+		UseTimeSeconds:  int(summary.UseTimeSeconds),
+		IsStream:        relayInfo.IsStream,
+		Group:           relayInfo.UsingGroup,
+		Other:           other,
 	})
 	relayInfo.PerformanceOutputTokens = int64(summary.CompletionTokens)
 }

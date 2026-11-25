@@ -1705,3 +1705,118 @@ func TestPostTextConsumeQuotaLogsMissingUsageAsStructuredContent(t *testing.T) {
 		map[string]any{"key": "Upstream returned no usage, so nothing was charged (possibly an upstream timeout)"},
 	}, other["content_parts"])
 }
+
+// InputTokens 是看板/使用报告「输入(非缓存)」维度的单一来源：
+// 各 usage 语义下 prompt_tokens 是否含缓存不同，这里统一归一化。
+func TestCalculateTextQuotaSummaryInputTokensPerUsageSemantic(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	newUsage := func(semantic string) *dto.Usage {
+		return &dto.Usage{
+			PromptTokens:     1000,
+			CompletionTokens: 200,
+			UsageSemantic:    semantic,
+			PromptTokensDetails: dto.InputTokenDetails{
+				CachedTokens:         100,
+				CachedCreationTokens: 50,
+			},
+		}
+	}
+	newRelayInfo := func(openRouter bool, finalClaude bool) *relaycommon.RelayInfo {
+		info := &relaycommon.RelayInfo{
+			RelayFormat:     types.RelayFormatOpenAI,
+			OriginModelName: "test-model",
+			PriceData: hosttypes.PriceData{
+				ModelRatio:         1,
+				CompletionRatio:    1,
+				CacheRatio:         0.1,
+				CacheCreationRatio: 1.25,
+				GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+			},
+			StartTime: time.Now(),
+		}
+		if openRouter {
+			info.ChannelMeta = &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeOpenRouter}
+		}
+		if finalClaude {
+			info.FinalRequestRelayFormat = types.RelayFormatClaude
+		}
+		return info
+	}
+
+	cases := []struct {
+		name      string
+		usage     *dto.Usage
+		relayInfo *relaycommon.RelayInfo
+		want      int
+		wantTotal int
+	}{
+		{
+			// OpenAI 语义：prompt 含缓存，输入 = prompt - 缓存读 - 缓存写
+			name:      "openai semantic subtracts cache from prompt",
+			usage:     newUsage(""),
+			relayInfo: newRelayInfo(false, false),
+			want:      850,
+			wantTotal: 1200,
+		},
+		{
+			// anthropic 语义：prompt 本就不含缓存，输入 = prompt；统一总量计入缓存
+			name:      "anthropic semantic keeps prompt as input",
+			usage:     newUsage("anthropic"),
+			relayInfo: newRelayInfo(false, false),
+			want:      1000,
+			wantTotal: 1350,
+		},
+		{
+			// OpenRouter + Claude 语义：计费前已把缓存从 prompt 减掉
+			name:      "openrouter claude semantic subtracts cache first",
+			usage:     newUsage("anthropic"),
+			relayInfo: newRelayInfo(true, false),
+			want:      850,
+			wantTotal: 1200,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			summary := calculateTextQuotaSummary(ctx, tc.relayInfo, tc.usage)
+			require.Equal(t, tc.want, summary.InputTokens)
+			// 缓存维度 = 读 + 写合计；输入+缓存+输出 = 统一总量
+			require.Equal(t, 150, summary.CacheTokensTotal)
+			require.Equal(t, tc.wantTotal,
+				summary.InputTokens+summary.CacheTokensTotal+summary.CompletionTokens)
+		})
+	}
+}
+
+// legacy Claude-derived（无语义标记、仅 5m/1h 拆分字段）视同 anthropic：prompt 不含缓存。
+func TestCalculateTextQuotaSummaryInputTokensLegacyClaudeDerived(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayFormat:     types.RelayFormatOpenAI,
+		OriginModelName: "claude-3-7-sonnet",
+		PriceData: hosttypes.PriceData{
+			ModelRatio:         1,
+			CompletionRatio:    1,
+			CacheRatio:         0.1,
+			CacheCreationRatio: 1.25,
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{
+		PromptTokens:                1000,
+		CompletionTokens:            200,
+		ClaudeCacheCreation5mTokens: 30,
+		ClaudeCacheCreation1hTokens: 20,
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.Equal(t, 1000, summary.InputTokens)
+}
