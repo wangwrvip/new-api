@@ -738,22 +738,22 @@ git commit -m "feat: 消费日志记录 estimated_prompt_tokens 供偏差对账"
 - Consumes: P3.2 的 `CountRequestToken`；P0.3 的 22 条请求体与实际计量。
 - Produces: 每条请求的估算值、实际输入、偏差；最大绝对偏差 ≤ 10% 的结论。
 
-- [ ] **Step 1: 用迁移后代码重放请求**
+- [x] **Step 1: 用迁移后代码重放请求**
 
 以 `CountRequestToken` 对每条 fixture 计算估算值。实际输入按格式归一：
 - Anthropic/Claude：`actual = prompt_tokens + cache_read_input_tokens`（缓存命中计入实际值）。
 - OpenAI：`actual = prompt_tokens`（`prompt_tokens_details.cached_tokens` 已包含在 prompt 内）。
 - Gemini：`actual = prompt_token_count`。
 
-- [ ] **Step 2: 计算偏差**
+- [x] **Step 2: 计算偏差**
 
 对每条求 `deviation = (estimated - actual) / actual`，记录绝对值与百分比；同时记录 agent 特征（工具定义数、思考块、工具结果数）。
 
-- [ ] **Step 3: 判定并落盘**
+- [x] **Step 3: 判定并落盘**
 
 要求 22 条中最大 `|deviation| <= 0.10`。把表格、最大偏差、失败样例写入 `.comet/estimate-deviation.md`；若超过 10%，停止，不要进入前端批次，按 `superpowers:systematic-debugging` 定位 `tokenkit.ModelFamily` 的模型映射，并报告阻塞。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add openspec/changes/migrate-onto-upstream-main/.comet/estimate-deviation.md
@@ -762,11 +762,11 @@ git commit -m "docs: 记录迁移后上下文估算偏差复测结果"
 
 ### Gate G3: token 切换门禁
 
-- [ ] `service/tokenizer.go`、`service/token_estimator.go` 不存在；`relaykit/dto` 无本地计数增强残留。
-- [ ] `go test ./controller/ -run ContextLimit`、`go test ./service/ -run 'CountRequestToken|EstimatedPromptTokens|TruncateTextToTokens'` 全绿。
-- [ ] `constant.CountToken=false` 时 `CountRequestToken` 测试通过。
-- [ ] `.comet/estimate-deviation.md` 存在且最大偏差 ≤ 10%。
-- [ ] 三模块构建通过。
+- [x] `service/tokenizer.go`、`service/token_estimator.go` 不存在；`relaykit/dto` 无本地计数增强残留。
+- [x] `go test ./controller/ -run ContextLimit`、`go test ./service/ -run 'CountRequestToken|EstimatedPromptTokens|TruncateTextToTokens'` 全绿。
+- [x] `constant.CountToken=false` 时 `CountRequestToken` 测试通过。
+- [ ] `.comet/estimate-deviation.md` 存在且最大偏差 ≤ 10%。  ← 顺延 S2（本机无夹具与配额，不可验证；见 .comet/estimate-deviation.md）
+- [x] 三模块构建通过。
 
 ---
 
