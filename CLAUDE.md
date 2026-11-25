@@ -1,4 +1,4 @@
-# CLAUDE.md
+# CLAUDE.md — new-api 项目约定
 
 本文件为 Claude Code（claude.ai/code）在此仓库中工作提供指导。
 
@@ -15,7 +15,7 @@
 - 如果任务涉及 `web/`，在编辑前端文件之前还必须 Read `web/AGENTS.md`。
 - 如果任务涉及计费（定义见 `AGENTS.md` 的 **Billing rules (mandatory read gate)**），在规划或修改前还必须完整 Read `.agents/rules/billing.md`；不在该定义范围内的任务可跳过。
 
-`AGENTS.md` 是项目规则的权威来源（代码质量、JSON 封装、三数据库兼容、计费安全不变量、测试质量、前端规范、治理规则）。本文件只补充常用命令与架构速览，不重复其内容。
+`AGENTS.md` 是项目规则的权威来源（代码质量、JSON 封装、三数据库兼容、测试质量、前端规范、治理规则）；计费约定与安全不变量见 `.agents/rules/billing.md`。本文件只补充常用命令与架构速览，不重复其内容。
 
 ## 项目概述
 
@@ -52,13 +52,13 @@ GOWORK=off go test ./relay/helper/ -run TestXxx -v
 go run main.go          # 默认 SQLite（one-api.db）；用 SQL_DSN/REDIS_CONN_STRING 环境变量切换
 ```
 
-CI（`.github/workflows/ci.yml`）执行：根模块、relaykit 与 tokenkit 各自的 `go vet` + `go build`，随后 `make test` 覆盖三个模块；前端 `bun run typecheck` + `bun run test`。
+CI（`.github/workflows/ci.yml`）执行：根模块、relaykit 与 tokenkit 各自的 `go vet` + `go build`，随后 `make test` 覆盖三个模块；前端 `bun check -b`（与 `web/package.json` 的 `typecheck` 脚本一致）+ `bun run test`。
 
 ### 前端（在 `web/` 目录下，使用 Bun）
 
 ```bash
 bun install
-bun run dev           # Rsbuild 开发服务器（:5173，API 代理到 :3000）
+bun run dev           # Rsbuild 开发服务器（默认端口 3000，API 代理到 :3000；make dev-web 显式传 --port 5173）
 bun run build         # 生产构建（输出 web/dist，被 Go 二进制内嵌）
 bun run typecheck     # tsgo -b；每次改动 TS/TSX 后必须执行且修复到零错误
 bun run lint          # oxlint；完成改动前必须修复所涉及文件的所有 error
@@ -89,7 +89,7 @@ make reset-setup      # 重置初始化向导状态（docker Postgres 或本地 
 - `controller/` — 请求处理器；转发入口是 `controller/relay.go` 的 `Relay(c, relayFormat)`
 - `service/` — 业务逻辑（渠道选择、计费、任务轮询、OAuth 凭证刷新等）
 - `model/` — GORM 数据模型与数据库访问；跨方言辅助在 `model/main.go`（`lockForUpdate`、`commonGroupCol`、`commonTrueVal` 等）
-- `setting/` — 配置管理，按域分子包（ratio、operation、system、performance、console_setting 等）
+- `setting/` — 配置管理，按域分子包（`ratio_setting`、`operation_setting`、`system_setting`、`performance_setting`、`console_setting` 等）
 - `common/` — 共享工具（JSON 封装、crypto、Redis、quota_math 等）
 - `dto/`、`types/`、`constant/` — 传输对象、类型（RelayFormat 等）、常量（API 类型、渠道类型、context key）
 
@@ -119,7 +119,7 @@ make reset-setup      # 重置初始化向导状态（docker Postgres 或本地 
 
 ### i18n
 
-- 后端：`i18n/`（go-i18n，en/zh）
+- 后端：`i18n/`（go-i18n，en / zh-CN / zh-TW）
 - 前端：`web/src/i18n/locales/{lang}.json`，扁平 JSON，键为英文原文；组件中 `useTranslation()` + `t('English key')`
 
 ### 其他入口
