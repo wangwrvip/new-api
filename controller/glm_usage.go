@@ -169,7 +169,7 @@ func fetchGlmChannelUsage(ctx context.Context, channel *model.Channel) glmUsageC
 	resp, err := client.Do(req)
 	if err != nil {
 		common.SysError(common.LogText("GLM usage: channel %d: upstream request failed: %s", channel.Id, err.Error()))
-		return glmUsageChannelResult{Message: "upstream request failed"}
+		return glmUsageChannelResult{Message: "Upstream request failed"}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

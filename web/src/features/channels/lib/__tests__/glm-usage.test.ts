@@ -19,7 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import i18next, { type TFunction } from 'i18next'
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
+
+import en from '@/i18n/locales/en.json'
+import zh from '@/i18n/locales/zh.json'
 
 import { getGlmUsageBatch } from '../../api'
 import { useGlmUsage } from '../../hooks/use-glm-usage'
@@ -30,6 +34,7 @@ import {
   getGlmRemainingVariant,
   getWorstGlmRemainingPercent,
   mergeGlmUsageBatches,
+  translateGlmUsageMessage,
 } from '../glm-usage'
 
 // Mock the network boundary: the hook must send one request per 50 ids, not
@@ -70,8 +75,14 @@ beforeEach(() => {
   batchRequest.mockReset()
 })
 
-afterEach(() => {
+afterEach(async () => {
   queryClient.clear()
+  await i18next.changeLanguage('en')
+})
+
+beforeAll(() => {
+  i18next.addResourceBundle('en', 'translation', en.translation, true, true)
+  i18next.addResourceBundle('zhCN', 'translation', zh.translation, true, true)
 })
 
 const fullUsage: GlmUsageResult = {
@@ -251,5 +262,51 @@ describe('getGlmRemainingVariant', () => {
   test('marks healthy windows as info', () => {
     expect(getGlmRemainingVariant(21)).toBe('info')
     expect(getGlmRemainingVariant(100)).toBe('info')
+  })
+})
+
+describe('translateGlmUsageMessage', () => {
+  test('keeps the upstream status code in the English template', () => {
+    expect(i18next.exists('upstream status: 502')).toBe(false)
+
+    expect(translateGlmUsageMessage('upstream status: 502', i18next.t)).toBe(
+      'upstream status: 502'
+    )
+  })
+
+  test('translates the upstream status line to Chinese without losing the code', async () => {
+    await i18next.changeLanguage('zhCN')
+
+    expect(translateGlmUsageMessage('upstream status: 401', i18next.t)).toBe(
+      '上游状态：401'
+    )
+  })
+
+  test('translates an ordinary backend message through the active language', async () => {
+    await i18next.changeLanguage('zhCN')
+
+    expect(translateGlmUsageMessage('channel not found', i18next.t)).toBe(
+      '未找到渠道'
+    )
+  })
+
+  test('hands a non-status backend message to t unchanged', () => {
+    const t = vi.fn((key: string) => `translated:${key}`) as unknown as TFunction
+
+    expect(translateGlmUsageMessage('upstream response invalid', t)).toBe(
+      'translated:upstream response invalid'
+    )
+    expect(t).toHaveBeenCalledTimes(1)
+    expect(t).toHaveBeenCalledWith('upstream response invalid')
+  })
+
+  test('does not interpolate near-miss status text', () => {
+    const t = vi.fn((key: string) => key) as unknown as TFunction
+
+    expect(translateGlmUsageMessage('upstream status: 502 retry', t)).toBe(
+      'upstream status: 502 retry'
+    )
+    expect(t).toHaveBeenCalledTimes(1)
+    expect(t).toHaveBeenCalledWith('upstream status: 502 retry')
   })
 })

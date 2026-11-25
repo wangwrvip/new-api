@@ -7866,7 +7866,6 @@
     "multi-key channel is not supported": "複数キーのチャネルはサポートされていません",
     "http client setup failed": "HTTP クライアントの設定に失敗しました",
     "request build failed": "リクエストの構築に失敗しました",
-    "upstream request failed": "上流へのリクエストに失敗しました",
     "upstream response read failed": "上流からのレスポンス読み取りに失敗しました",
     "upstream response invalid": "上流からのレスポンスが無効です",
     "upstream rejected the request": "上流がリクエストを拒否しました",

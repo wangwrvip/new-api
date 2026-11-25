@@ -243,6 +243,23 @@ func TestFetchGlmChannelUsageDistinguishesFailureMessages(t *testing.T) {
 	}
 }
 
+func TestFetchGlmChannelUsageTransportFailureUsesUpstreamKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	server.Close()
+
+	channel := &model.Channel{
+		Id:      1,
+		Type:    constant.ChannelTypeZhipu,
+		Key:     "sk-glm",
+		BaseURL: &server.URL,
+	}
+
+	result := fetchGlmChannelUsage(context.Background(), channel)
+
+	require.False(t, result.Success)
+	assert.Equal(t, "Upstream request failed", result.Message)
+}
+
 func TestGetGlmChannelsUsageRejectsMultiKeyChannel(t *testing.T) {
 	db := setupGlmUsageTestDB(t)
 	var requests atomic.Int32

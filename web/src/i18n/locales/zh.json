@@ -7866,7 +7866,6 @@
     "multi-key channel is not supported": "不支持多密钥渠道",
     "http client setup failed": "HTTP 客户端初始化失败",
     "request build failed": "请求构建失败",
-    "upstream request failed": "上游请求失败",
     "upstream response read failed": "读取上游响应失败",
     "upstream response invalid": "上游响应无效",
     "upstream rejected the request": "上游拒绝了请求",

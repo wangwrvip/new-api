@@ -82,6 +82,7 @@ import {
   getGlmBadgeSegments,
   getGlmRemainingVariant,
   getWorstGlmRemainingPercent,
+  translateGlmUsageMessage,
   isMultiKeyChannel,
   parseModelsList,
   parseGroupsList,
@@ -631,7 +632,12 @@ export function BalanceCell({ channel }: { channel: Channel }) {
       remainingBadgeVariant = 'warning'
       glmTooltipContent = (
         <>
-          <p>{t(glmUsage.message || 'Failed to fetch usage')}</p>
+          <p>
+            {translateGlmUsageMessage(
+              glmUsage.message?.trim() || 'Failed to fetch usage',
+              t
+            )}
+          </p>
           <p>{t('Click to view GLM usage')}</p>
         </>
       )

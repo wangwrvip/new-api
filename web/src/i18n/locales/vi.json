@@ -7866,7 +7866,6 @@
     "multi-key channel is not supported": "Không hỗ trợ kênh nhiều khóa",
     "http client setup failed": "Không thiết lập được ứng dụng client HTTP",
     "request build failed": "Không tạo được yêu cầu",
-    "upstream request failed": "Yêu cầu thượng nguồn thất bại",
     "upstream response read failed": "Không đọc được phản hồi từ thượng nguồn",
     "upstream response invalid": "Phản hồi thượng nguồn không hợp lệ",
     "upstream rejected the request": "Thượng nguồn đã từ chối yêu cầu",

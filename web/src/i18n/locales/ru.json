@@ -7866,7 +7866,6 @@
     "multi-key channel is not supported": "Каналы с несколькими ключами не поддерживаются",
     "http client setup failed": "Не удалось настроить HTTP-клиент",
     "request build failed": "Не удалось сформировать запрос",
-    "upstream request failed": "Запрос к вышестоящему серверу не удался",
     "upstream response read failed": "Не удалось прочитать ответ вышестоящего сервера",
     "upstream response invalid": "Недопустимый ответ вышестоящего сервера",
     "upstream rejected the request": "Вышестоящий сервер отклонил запрос",

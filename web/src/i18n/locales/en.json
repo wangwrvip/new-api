@@ -7866,7 +7866,6 @@
     "multi-key channel is not supported": "multi-key channel is not supported",
     "http client setup failed": "http client setup failed",
     "request build failed": "request build failed",
-    "upstream request failed": "upstream request failed",
     "upstream response read failed": "upstream response read failed",
     "upstream response invalid": "upstream response invalid",
     "upstream rejected the request": "upstream rejected the request",

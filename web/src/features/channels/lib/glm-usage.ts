@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { TFunction } from 'i18next'
+
 import type { GlmUsageBatchResponse, GlmUsageResult } from '../types'
 
 // The backend accepts at most 50 ids per request and silently drops the rest.
@@ -46,6 +48,17 @@ export function mergeGlmUsageBatches(
     }
   }
   return merged
+}
+
+// The backend formats the upstream status with fmt.Sprintf("upstream status: %d"),
+// so the exact message is never an i18n key. Route that one pattern through the
+// registered template and leave every other backend message to t() as before.
+export function translateGlmUsageMessage(message: string, t: TFunction): string {
+  const match = /^upstream status: (\d+)$/.exec(message)
+  if (!match) {
+    return t(message)
+  }
+  return t('upstream status: {{status}}', { status: match[1] })
 }
 
 export type GlmBadgeSegment = {

@@ -7866,7 +7866,6 @@
     "multi-key channel is not supported": "Les canaux à plusieurs clés ne sont pas pris en charge",
     "http client setup failed": "Échec de la configuration du client HTTP",
     "request build failed": "Échec de la construction de la requête",
-    "upstream request failed": "Échec de la requête en amont",
     "upstream response read failed": "Échec de la lecture de la réponse en amont",
     "upstream response invalid": "Réponse en amont invalide",
     "upstream rejected the request": "La requête a été rejetée en amont",

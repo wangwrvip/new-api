@@ -948,7 +948,6 @@ export const STATIC_I18N_KEYS = [
   'multi-key channel is not supported',
   'http client setup failed',
   'request build failed',
-  'upstream request failed',
   'upstream response read failed',
   'upstream response invalid',
   'upstream rejected the request',

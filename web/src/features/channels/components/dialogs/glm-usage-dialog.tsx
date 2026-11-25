@@ -34,7 +34,10 @@ import dayjs from '@/lib/dayjs'
 import { formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { getGlmRemainingVariant } from '../../lib'
+import {
+  getGlmRemainingVariant,
+  translateGlmUsageMessage,
+} from '../../lib'
 import type { GlmUsageResult, GlmUsageSlot } from '../../types'
 
 type GlmUsageDialogProps = {
@@ -151,11 +154,15 @@ export function GlmUsageDialog(props: GlmUsageDialogProps) {
     channelLabelId = ` (#${props.channelId})`
   }
   const channelLabel = `${channelLabelName}${channelLabelId}`
-  // The server returns a fixed message for upstream failures; it never sends
-  // the original error, so render the message as an i18n key and stop there.
+  // The server returns fixed messages for upstream failures; it never sends
+  // the original error. The dynamic upstream status line needs its template
+  // key so translated interfaces keep the numeric status code.
   const errorMessage =
     props.response?.success === false
-      ? t(props.response.message?.trim() || 'Failed to fetch usage')
+      ? translateGlmUsageMessage(
+          props.response.message?.trim() || 'Failed to fetch usage',
+          t
+        )
       : ''
 
   return (
