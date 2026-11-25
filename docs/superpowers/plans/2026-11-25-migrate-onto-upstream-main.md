@@ -633,19 +633,19 @@ Expected: 全绿。勾选 tasks.md 4.1。
   - `func contextLimitErrorOther(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens, limit int) *model.LogOther`。
   - `func recordContextLimitErrorLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens, limit int)`。
 
-- [ ] **Step 1: 取设置与测试**
+- [x] **Step 1: 取设置与测试**
 
 Run: `git checkout backup-before-upstream -- setting/operation_setting/context_limit_setting.go setting/operation_setting/context_limit_setting_test.go`
 Run: `go test ./setting/operation_setting/ -run 'MaxPromptTokensForModel|ContextLimitSetting'`
 Expected: 全绿（覆盖总开关、精确/大小写不敏感匹配、默认回退、0 不限制、按模型 0 覆写默认）。
 
-- [ ] **Step 2: 加回错误码**
+- [x] **Step 2: 加回错误码**
 
 在 `relaykit/types/error.go` 的错误码常量区加入 `ErrorCodeContextLimitExceeded`，位置不影响语义。
 Run: `(cd relaykit && GOWORK=off go build ./...)`
 Expected: 退出 0。
 
-- [ ] **Step 3: 在 relay 流程中插入限制判定**
+- [x] **Step 3: 在 relay 流程中插入限制判定**
 
 在 `controller/relay.go` 的 `relay.PrepareRequestBilling(c, relayInfo)` 调用之前：
 1. `limit := operation_setting.MaxPromptTokensForModel(relayInfo.OriginModelName)`。
@@ -654,7 +654,7 @@ Expected: 退出 0。
 4. 未超限时继续调用 `PrepareRequestBilling`；允许其内部再次估算（计费口径与限制口径分离）。
 5. 若 P2.5 已为预览计算过 meta，复用之，避免同一请求重复 `GetTokenCountMeta`。
 
-- [ ] **Step 4: 用 LogOther 重写错误日志**
+- [x] **Step 4: 用 LogOther 重写错误日志**
 
 `contextLimitErrorOther` 构造 `model.NewLogOther()` 并写入：
 - `SetPublic("request_path", ...)`
@@ -668,7 +668,7 @@ Expected: 退出 0。
 
 `recordContextLimitErrorLog` 使用 `model.RecordErrorLog(c, c.GetInt("id"), c.GetInt("channel_id"), relayInfo.OriginModelName, c.GetString("token_name"), <message>, c.GetInt("token_id"), <useTime>, <isStream>, c.GetString("group"), other)`，并保留 `constant.ErrorLogEnabled` 前置检查。
 
-- [ ] **Step 5: 添加三条回归测试**
+- [x] **Step 5: 添加三条回归测试**
 
 `controller/relay_context_limit_test.go`：
 - `TestContextLimitErrorReturns413WithCode`：`contextLimitError` 的 `StatusCode=413`、`GetErrorCode()=="context_limit_exceeded"`。
@@ -685,7 +685,7 @@ go test ./service/ -run 'CountRequestTokenIgnoresBillingSwitch'
 ```
 Expected: 全绿。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add setting/operation_setting/context_limit_setting.go setting/operation_setting/context_limit_setting_test.go relaykit/types/error.go controller/relay.go controller/relay_context_limit_test.go service/token_counter_context_limit_test.go
