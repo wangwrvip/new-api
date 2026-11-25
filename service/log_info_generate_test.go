@@ -50,6 +50,56 @@ func TestGenerateTextOtherInfoWritesPreviewsTopLevel(t *testing.T) {
 	require.False(t, hasResp, "response_preview must not be duplicated under admin_info")
 }
 
+// TestGenerateTextOtherInfoPreviewsRespectPluginMask verifies a request whose
+// plugin masked content writes no previews: they are captured before the
+// plugins run and may still hold the text the plugin removed. A plugin record
+// without masking keeps the previews as before.
+func TestGenerateTextOtherInfoPreviewsRespectPluginMask(t *testing.T) {
+	tests := []struct {
+		name   string
+		record []relaycommon.RequestPluginRecord
+		hidden bool
+	}{
+		{
+			name:   "masked content hides every preview",
+			record: []relaycommon.RequestPluginRecord{{Plugin: "rp-reply", Stage: "reply", Masked: 1}},
+			hidden: true,
+		},
+		{
+			name: "record without masking keeps previews",
+			record: []relaycommon.RequestPluginRecord{{Plugin: "rp-outbound", Stage: "outbound",
+				Changes: []relaycommon.RequestPluginChange{{Op: "add", Path: "temperature"}}}},
+			hidden: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := newTextOtherInfoTestContext()
+			relayInfo := newTextOtherInfoTestRelayInfo()
+			relayInfo.RequestPreview = "请求文本预览"
+			relayInfo.RequestPreviewUser = "用户输入"
+			relayInfo.ResponsePreview = "模型输出的第一段内容"
+			relayInfo.RequestPluginRecord = tt.record
+
+			other := GenerateTextOtherInfo(ctx, relayInfo, 1, 1, 1, 0, 0, 0, 1).Snapshot()
+
+			for key, want := range map[string]string{
+				"request_preview":      "请求文本预览",
+				"request_preview_user": "用户输入",
+				"response_preview":     "模型输出的第一段内容",
+			} {
+				got, exists := other[key]
+				if tt.hidden {
+					require.False(t, exists, "%s must not be written when a plugin masked content", key)
+					continue
+				}
+				require.True(t, exists, "%s should be written when nothing was masked", key)
+				require.Equal(t, want, got)
+			}
+		})
+	}
+}
+
 // TestGenerateTextOtherInfoOmitsEmptyPreviews verifies no preview keys are
 // written when the relay captured no preview text.
 func TestGenerateTextOtherInfoOmitsEmptyPreviews(t *testing.T) {

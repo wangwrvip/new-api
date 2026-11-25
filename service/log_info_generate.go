@@ -127,15 +127,22 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 
 	AppendRelayLogAdminInfo(ctx, relayInfo, other)
 	// Previews are visible to the log owner, so they stay at the top level of
-	// other instead of the admin-only scope.
-	if relayInfo.RequestPreview != "" {
-		other.SetPublic("request_preview", relayInfo.RequestPreview)
-	}
-	if relayInfo.RequestPreviewUser != "" {
-		other.SetPublic("request_preview_user", relayInfo.RequestPreviewUser)
-	}
-	if relayInfo.ResponsePreview != "" {
-		other.SetPublic("response_preview", relayInfo.ResponsePreview)
+	// other instead of the admin-only scope. They are captured before the
+	// plugins run: when a plugin masked content in this request, the previews
+	// may still hold the masked text, so none of them is written.
+	pluginMasked := slices.ContainsFunc(relayInfo.RequestPluginRecord, func(entry relaycommon.RequestPluginRecord) bool {
+		return entry.Masked > 0
+	})
+	if !pluginMasked {
+		if relayInfo.RequestPreview != "" {
+			other.SetPublic("request_preview", relayInfo.RequestPreview)
+		}
+		if relayInfo.RequestPreviewUser != "" {
+			other.SetPublic("request_preview_user", relayInfo.RequestPreviewUser)
+		}
+		if relayInfo.ResponsePreview != "" {
+			other.SetPublic("response_preview", relayInfo.ResponsePreview)
+		}
 	}
 	AppendResponseModelLogInfo(relayInfo, other)
 	appendRequestPath(ctx, relayInfo, other)
