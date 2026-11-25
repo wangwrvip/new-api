@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -50,5 +51,34 @@ func TestTruncateTextToTokens(t *testing.T) {
 		tokens := CountTextToken(got, model)
 		assert.GreaterOrEqual(t, tokens, 200)
 		assert.LessOrEqual(t, tokens, 210)
+	})
+
+	t.Run("space-heavy gemini text does not expand to the whole body", func(t *testing.T) {
+		// Gemini 权重把普通空格计为 0 token，任意前缀估算恒为 0；旧实现会把搜索
+		// 窗口扩到全文并整段返回。
+		const geminiModel = "gemini-2.5-flash"
+		text := strings.Repeat(" ", 1_000_000)
+		require.Equal(t, 0, CountTextToken(text, geminiModel))
+		got := TruncateTextToTokens(text, geminiModel, 200)
+		require.NotEqual(t, text, got)
+		assert.True(t, strings.HasPrefix(text, got), "result must be a prefix of input")
+		assert.LessOrEqual(t, len([]rune(got)), 8*200, "the 8x window must not expand to the full text")
+	})
+
+	t.Run("result never exceeds the hard rune cap", func(t *testing.T) {
+		// maxTokens=2000 时 8x 窗口为 16000 rune，超过固定硬上限；估算恒为 0
+		// 的空格文本仍必须被硬上限截断。
+		text := strings.Repeat(" ", 1_000_000)
+		got := TruncateTextToTokens(text, "gemini-2.5-flash", 2000)
+		require.NotEqual(t, text, got)
+		assert.Len(t, []rune(got), previewHardCapRunes)
+	})
+
+	t.Run("huge token limit is clamped without panic", func(t *testing.T) {
+		// 极大 maxTokens 若直接参与 maxTokens*8 会溢出为负数并导致切片 panic。
+		text := strings.Repeat("word ", 20_000)
+		got := TruncateTextToTokens(text, model, math.MaxInt)
+		require.True(t, strings.HasPrefix(text, got), "result must be a prefix of input")
+		assert.LessOrEqual(t, len([]rune(got)), previewHardCapRunes)
 	})
 }
