@@ -399,16 +399,16 @@ git commit -m "feat: 消费日志归一化 token 维度与缓存读计数"
   - `model.User.Department string`（`gorm:"type:varchar(64);default:'公共部门';index"`，`validate:"max=64"`）。
   - `setting.DepartmentListKey`、`setting.DefaultDepartment`、`setting.GetDepartments() []string`、`setting.IsValidDepartment(name string) bool`、`setting.Departments2JsonString() string`。
 
-- [ ] **Step 1: 取部门设置实现**
+- [x] **Step 1: 取部门设置实现**
 
 Run: `git checkout backup-before-upstream -- setting/department_setting.go`
 Expected: 文件进入暂存区。
 
-- [ ] **Step 2: 合并 User 字段与用户接口**
+- [x] **Step 2: 合并 User 字段与用户接口**
 
 在 `model/user.go` 的 `User` 结构体加 `Department` 字段（位置与标签取自 backup），并在用户序列化/响应处带出 `department`。在 `controller/user.go` 的创建/更新路径校验 `IsValidDepartment`，非法值返回 400；未传时使用 `DefaultDepartment`。`model/option.go` 的 `InitOptionMap` 注册 `setting.DepartmentListKey = setting.Departments2JsonString()`。
 
-- [ ] **Step 3: 添加部门设置测试**
+- [x] **Step 3: 添加部门设置测试**
 
 新增 `setting/department_setting_test.go`：
 - `TestGetDepartmentsReturnsDefaultsWhenUnset`：`common.OptionMap` 为空时返回默认清单，首项为 `公共部门`。
@@ -418,7 +418,7 @@ Expected: 文件进入暂存区。
 Run: `go test ./setting/ -run 'Department|GetDepartments|IsValidDepartment'`
 Expected: 全绿。
 
-- [ ] **Step 4: 验证 SQLite AutoMigrate 幂等**
+- [x] **Step 4: 验证 SQLite AutoMigrate 幂等**
 
 Run（连续两次，第二次不得报错）：
 ```bash
@@ -429,7 +429,7 @@ sleep 8; kill %1
 ```
 Expected: 两次启动日志均无 `AutoMigrate` / `department` 相关错误；`sqlite3 /tmp/dept-migrate.db '.schema users'` 含 `department varchar(64) default '公共部门'`。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add setting/department_setting.go setting/department_setting_test.go model/user.go controller/user.go model/option.go

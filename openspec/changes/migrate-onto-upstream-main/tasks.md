@@ -14,7 +14,7 @@
 ## 3. 批次二：后端自研功能
 
 - [ ] 3.1 重放使用报告相关提交（`model/usage_report*`、`controller/usage_report.go`、`dto/usage_report.go`）；验证 `go test ./model/ ./controller/ -run UsageReport` 通过
-- [ ] 3.2 重放用户部门属性提交（`setting/department_setting.go`、`model/user.go`）；验证模型测试通过，且 SQLite 下 AutoMigrate 连续启动两次不报错
+- [x] 3.2 重放用户部门属性提交（`setting/department_setting.go`、`model/user.go`）；验证模型测试通过，且 SQLite 下 AutoMigrate 连续启动两次不报错
 - [ ] 3.3 重放 GLM 渠道用量提交（`controller/glm_usage.go`、路由注册、渠道前端）；验证 `go test ./controller/ -run GLM` 通过且路由注册测试覆盖新增端点
 - [ ] 3.4 重放缓存命中率统计提交（`cache_read_tokens` 从日志写入到使用报告聚合）；验证 `go test ./model/ -run RecordConsumeLog` 与使用报告聚合测试通过
 
