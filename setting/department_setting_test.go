@@ -45,6 +45,42 @@ func TestGetDepartmentsFallsBackOnInvalidJSON(t *testing.T) {
 	assert.Equal(t, DefaultDepartment, departments[0])
 }
 
+func TestNormalizeDepartment(t *testing.T) {
+	useDepartmentListOption(t, `["公共部门","视频部"]`)
+
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty falls back to default", value: "", want: DefaultDepartment},
+		{name: "whitespace only falls back to default", value: "   ", want: DefaultDepartment},
+		{name: "surrounding whitespace trimmed", value: "  视频部  ", want: "视频部"},
+		{name: "unlisted rejected", value: "不存在的部门", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NormalizeDepartment(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestDepartmentsJsonStringRoundTrip(t *testing.T) {
+	useDepartmentListOption(t, Departments2JsonString())
+
+	want := []string{DefaultDepartment, "视频部", "单片机", "路由网关", "测试组", "硬件部", "工控机部", "平台部"}
+
+	assert.Equal(t, want, GetDepartments())
+}
+
 func TestIsValidDepartment(t *testing.T) {
 	useDepartmentListOption(t, `["公共部门","视频部"]`)
 
