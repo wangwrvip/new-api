@@ -68,8 +68,14 @@ import {
 import { pluginUsageSchema } from '@/features/pricing/lib/plugin-pricing'
 import { PolicyDecisionRecord } from '@/features/system-settings/request-policies/decision-record'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
+import {
+  formatLogQuota,
+  formatNumber,
+  formatTokens,
+  formatUseTime,
+} from '@/lib/format'
 import { translateServerText } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
@@ -399,7 +405,7 @@ function BillingBreakdown(props: {
 }
 
 function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { log, other } = props
 
   const promptTokens = log.prompt_tokens || 0
@@ -416,6 +422,7 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   if (!hasTokens) return null
 
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const compiled = compileBillingExpression(
     decodeBillingExprB64(other.expr_b64)
   )
@@ -491,6 +498,21 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
       label: t('Image Tokens'),
       value: other.image_output.toLocaleString(),
     })
+  }
+
+  // Local estimate vs upstream actual: Anthropic's prompt count excludes
+  // cache hits, so the full context adds them; OpenAI already includes them.
+  const estimatedPrompt = other.estimated_prompt_tokens
+  if (estimatedPrompt != null) {
+    const actualPrompt = promptTokens + (other.claude ? cacheRead : 0)
+    if (actualPrompt > 0) {
+      const delta = (100 * (estimatedPrompt - actualPrompt)) / actualPrompt
+      const signed = `${delta > 0 ? '+' : ''}${formatNumber(delta, locale)}%`
+      rows.push({
+        label: t('Estimated / Actual'),
+        value: `${formatNumber(estimatedPrompt, locale)} / ${formatNumber(actualPrompt, locale)} (${signed})`,
+      })
+    }
   }
 
   return (
@@ -679,6 +701,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const useChannel = other?.admin_info?.use_channel
   const channelChain =
     useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+  // Request/output previews are visible to the log owner. Current backend
+  // writes them at the top level of other; historical logs only carry them
+  // under admin_info (which the backend hoists for non-admin views and which
+  // remains available to admins here).
+  const requestPreview =
+    other?.request_preview ?? other?.admin_info?.request_preview
+  const requestPreviewUser =
+    other?.request_preview_user ?? other?.admin_info?.request_preview_user
+  const responsePreview =
+    other?.response_preview ?? other?.admin_info?.response_preview
   const reasoningEffortVariant = getReasoningEffortVariant(
     other?.reasoning_effort
   )
@@ -1417,6 +1449,90 @@ export function DetailsDialog(props: DetailsDialogProps) {
               )
             })}
           </DetailSection>
+        )}
+
+        {/* Request preview */}
+        {requestPreview && (
+          <div className='space-y-1.5'>
+            <Label className='text-xs font-semibold'>
+              {t('Request Preview')}
+            </Label>
+            <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                onClick={() => copyToClipboard(requestPreview)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === requestPreview ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <pre className='min-w-0 pr-6 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
+                {requestPreview}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* Last user message preview */}
+        {requestPreviewUser && (
+          <div className='space-y-1.5'>
+            <Label className='text-xs font-semibold'>
+              {t('Last User Message')}
+            </Label>
+            <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                onClick={() => copyToClipboard(requestPreviewUser)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === requestPreviewUser ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <pre className='min-w-0 pr-6 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
+                {requestPreviewUser}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* Response preview */}
+        {responsePreview && (
+          <div className='space-y-1.5'>
+            <Label className='text-xs font-semibold'>
+              {t('Response Preview')}
+            </Label>
+            <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                onClick={() => copyToClipboard(responsePreview)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === responsePreview ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <pre className='min-w-0 pr-6 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
+                {responsePreview}
+              </pre>
+            </div>
+          </div>
         )}
 
         {/* Content */}

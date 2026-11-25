@@ -29,6 +29,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import type { BillingUsageSchema } from '../types'
 import {
+  flattenBinary,
   readTokenTierChain,
   readTaskTierChain,
   readTimeTokenPricing,
@@ -39,6 +40,7 @@ import {
   splitExpressionAtTopLevel,
   unwrapExpressionParens,
 } from './billing-expression/structure'
+import type { ExpressionNode } from './billing-expression/types'
 
 // ---------------------------------------------------------------------------
 // Variable registry
@@ -274,6 +276,8 @@ export type TierCondition = {
 export type ParsedTier = {
   billingUnit?: 'token' | 'request'
   fixedPrice?: number
+  /** Set when the tier body is a pure numeric literal (flat per-request fee). */
+  flatConstant?: number
   conditionText?: string
   label: string
   conditions: TierCondition[]
@@ -317,13 +321,69 @@ function mapTokenTier(
   }
 }
 
+/** Token thresholds on a tier branch, when they follow the display grammar. */
+function flatTierConditions(node: ExpressionNode): TierCondition[] | null {
+  const conditions: TierCondition[] = []
+  for (const part of flattenBinary(node, '&&')) {
+    if (
+      part.kind !== 'binary' ||
+      !['<', '<=', '>', '>='].includes(part.operator) ||
+      part.left.kind !== 'variable' ||
+      !['p', 'c', 'len'].includes(part.left.name) ||
+      part.right.kind !== 'literal' ||
+      typeof part.right.value !== 'number'
+    ) {
+      return null
+    }
+    conditions.push({
+      var: part.left.name as TierCondition['var'],
+      op: part.operator as TierCondition['op'],
+      value: part.right.value,
+    })
+  }
+  return conditions
+}
+
+function flatTierFromNode(
+  node: ExpressionNode,
+  conditions: TierCondition[]
+): ParsedTier | null {
+  if (node.kind !== 'call' || node.name !== 'tier') return null
+  const [labelNode, bodyNode] = node.args
+  if (labelNode?.kind !== 'literal' || typeof labelNode.value !== 'string') {
+    return null
+  }
+  if (bodyNode?.kind !== 'literal' || typeof bodyNode.value !== 'number') {
+    return null
+  }
+  return { label: labelNode.value, conditions, flatConstant: bodyNode.value }
+}
+
+/** A tier chain whose bodies are flat fees rather than per-token price terms. */
+function readFlatTierChain(node: ExpressionNode): ParsedTier[] | null {
+  if (node.kind === 'conditional') {
+    const conditions = flatTierConditions(node.condition)
+    if (!conditions) return null
+    const matchedTier = flatTierFromNode(node.yes, conditions)
+    const remaining = readFlatTierChain(node.no)
+    if (!matchedTier || !remaining) return null
+    return [matchedTier, ...remaining]
+  }
+  const tier = flatTierFromNode(node, [])
+  return tier ? [tier] : null
+}
+
 export function parseTiersFromExpr(exprStr: string): ParsedTier[] {
   if (!exprStr) return []
   const compiled = compileBillingExpression(exprStr)
   if (compiled.status !== 'ready') return []
   const canonical = readTokenTierChain(compiled.ast)
   if (canonical) return canonical.map(mapTokenTier)
-  return readTimeTokenPricing(exprStr)?.tiers.map(mapTokenTier) ?? []
+  const timeTiers = readTimeTokenPricing(exprStr)?.tiers.map(mapTokenTier)
+  if (timeTiers) return timeTiers
+  // The token reader needs price terms, so a pure numeric body is read from the
+  // same AST separately and kept as a flat per-request fee.
+  return readFlatTierChain(compiled.ast) ?? []
 }
 
 /** Current-time selection is exclusively for summaries; detail and log callers retain all rows. */

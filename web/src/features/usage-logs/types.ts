@@ -232,6 +232,12 @@ export interface LogOtherData {
     }
     // Reject / intercept reason (admin only)
     reject_reason?: string
+    // Legacy preview fields: older versions wrote previews here (admin-only).
+    // Current versions write them at the top level of other; these remain so
+    // admins can view previews on historical logs.
+    request_preview?: string
+    request_preview_user?: string
+    response_preview?: string
     task_plugin?: TaskPluginInfo
   }
   root_info?: {
@@ -264,6 +270,20 @@ export interface LogOtherData {
   login_method?: string
   user_agent?: string
   request_path?: string
+  // Error log fields (type=5). error_code comes from relaykit/types error codes;
+  // context limit rejections additionally carry the estimated size and the limit.
+  error_type?: string
+  error_code?: string
+  status_code?: number
+  estimated_prompt_tokens?: number
+  context_limit?: number
+  relay_format?: string
+  // Request/output preview fields, visible to the log owner. Older entries
+  // only carry them under admin_info; the backend hoists them for non-admin
+  // views and the dialog falls back for admin views.
+  request_preview?: string
+  request_preview_user?: string
+  response_preview?: string
   request_conversion?: string[]
   ws?: boolean
   audio?: boolean

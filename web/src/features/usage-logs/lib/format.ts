@@ -325,6 +325,10 @@ export interface TieredBillingSummary {
     price: number
     unit?: 'request' | 'image'
   }>
+  /** Flat per-request fee in USD when the tier body is a pure constant
+   *  (no per-token prices). Derived from the same conversion the token
+   *  expressions use: `constant / 1_000_000` with `QuotaPerUnit = 500000`. */
+  flatPerCallUsd?: number
 }
 
 /**
@@ -423,7 +427,14 @@ export function getTieredBillingSummary(
       })
     }
   }
-  return { tiers, tier, priceEntries }
+  const flatConstant = tier.flatConstant
+  const flatPerCallUsd =
+    priceEntries.length === 0 &&
+    typeof flatConstant === 'number' &&
+    Number.isFinite(flatConstant)
+      ? flatConstant / 1_000_000
+      : undefined
+  return { tiers, tier, priceEntries, flatPerCallUsd }
 }
 
 /**
