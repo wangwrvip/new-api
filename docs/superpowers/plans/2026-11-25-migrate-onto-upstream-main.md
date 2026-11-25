@@ -90,27 +90,27 @@ base-ref: 4fc13c05949e1ba81bc9aae192a379c57a39bca3
 - Consumes: `origin/main` = `6627f0e3f37c002564b630a73e5afb0d28a92d3b`；`backup-before-upstream` = `0f9d13e9a129527a26a5b5b6ce27adf8d6c06723`；`fork/main` 同备份分支。
 - Produces: 分支 `migrate/upstream-2026-11`，其历史直接坐在 `origin/main` 上。
 
-- [ ] **Step 1: 确认工作区干净**
+- [x] **Step 1: 确认工作区干净**
 
 Run: `git status --porcelain`
 Expected: 无输出（被忽略的 `web/dist`、`data/`、`new-api` 不计）。
 
-- [ ] **Step 2: 核验备份两端存在且一致**
+- [x] **Step 2: 核验备份两端存在且一致**
 
 Run: `git rev-parse origin/main backup-before-upstream fork/main`
 Expected: 三行依次为 `6627f0e3f…`、`0f9d13e9a…`、`0f9d13e9a…`。
 
-- [ ] **Step 3: 从上游建立迁移分支**
+- [x] **Step 3: 从上游建立迁移分支**
 
 Run: `git switch -c migrate/upstream-2026-11 origin/main`
 Expected: 切换成功；`git branch --show-current` 输出 `migrate/upstream-2026-11`。
 
-- [ ] **Step 4: 验证祖先关系**
+- [x] **Step 4: 验证祖先关系**
 
 Run: `git merge-base --is-ancestor origin/main HEAD; echo $?`
 Expected: `0`。
 
-- [ ] **Step 5: 勾选 tasks.md 1.1**
+- [x] **Step 5: 勾选 tasks.md 1.1**
 
 在 `openspec/changes/migrate-onto-upstream-main/tasks.md` 把 `1.1` 改为 `[x]`（该文件在 P1.3 才进入迁移分支，可先记在临时清单，P1.3 一并提交）。
 
