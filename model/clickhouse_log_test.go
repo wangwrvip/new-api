@@ -2,6 +2,7 @@ package model
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm/schema"
 )
 
 func TestIsClickHouseDSN(t *testing.T) {
@@ -88,6 +90,62 @@ func TestClickHouseLogCreateTableSQL(t *testing.T) {
 	withTTL := clickHouseLogCreateTableSQL(30)
 	assert.Contains(t, withTTL, "ORDER BY (created_at, request_id)")
 	assert.Contains(t, withTTL, "TTL toDateTime(created_at) + INTERVAL 30 DAY DELETE")
+
+	for _, column := range []string{"input_tokens", "cache_tokens", "cache_read_tokens"} {
+		assert.Contains(t, withoutTTL, column+" Int32 DEFAULT 0")
+	}
+}
+
+// clickHouseLogColumnNames extracts the column names declared in the CREATE
+// TABLE body so tests can compare the explicit ClickHouse column list against
+// the persisted Log model.
+func clickHouseLogColumnNames(createTableSQL string) map[string]bool {
+	columns := make(map[string]bool)
+	for line := range strings.SplitSeq(createTableSQL, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		name, rest, ok := strings.Cut(line, " ")
+		if !ok || rest == "" {
+			continue
+		}
+		name = strings.Trim(name, "`\"")
+		if name == ")" {
+			continue
+		}
+		columns[name] = true
+	}
+	return columns
+}
+
+// The ClickHouse logs table is an explicit column list, so every persisted Log
+// field must appear there or that dialect silently rejects consume-log writes.
+// ChannelName is gorm:"->" (read-only) and is intentionally absent.
+func TestClickHouseLogCreateTableSQLCoversAllPersistedColumns(t *testing.T) {
+	columns := clickHouseLogColumnNames(clickHouseLogCreateTableSQL(0))
+	naming := schema.NamingStrategy{}
+	logType := reflect.TypeFor[Log]()
+	for i := range logType.NumField() {
+		field := logType.Field(i)
+		if strings.Contains(field.Tag.Get("gorm"), "->") {
+			continue
+		}
+		column := naming.ColumnName("", field.Name)
+		assert.Truef(t, columns[column], "Log.%s column %q is missing from the ClickHouse CREATE TABLE", field.Name, column)
+	}
+}
+
+func TestClickHouseLogAddColumnsSQLIsIdempotentAndCoversNewColumns(t *testing.T) {
+	statements := clickHouseLogAddColumnsSQL()
+	require.Len(t, statements, 3)
+	joined := strings.Join(statements, "\n")
+	for _, column := range []string{"input_tokens", "cache_tokens", "cache_read_tokens"} {
+		assert.Contains(t, joined, "ADD COLUMN IF NOT EXISTS "+column+" Int32 DEFAULT 0")
+	}
+	for _, statement := range statements {
+		assert.True(t, strings.HasPrefix(statement, "ALTER TABLE logs "), statement)
+	}
 }
 
 func TestClickHouseCreateTableHasTTL(t *testing.T) {

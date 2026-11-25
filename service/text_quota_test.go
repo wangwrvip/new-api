@@ -1085,6 +1085,85 @@ func TestCalculateTextQuotaSummaryKeepsPrePRClaudeOpenRouterBilling(t *testing.T
 	require.Equal(t, 798, summary.Quota)
 }
 
+// OpenRouter 的 Claude 计费在 upstream 未显式给出 creation tokens 时，会用
+// usage.cost 反推写缓存量。CacheTokensTotal 必须在该推断之后计算，否则看板
+// 缓存维度会漏掉推断出的写分量。
+func TestCalculateTextQuotaSummaryInfersOpenRouterCacheCreationFromCost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		FinalRequestRelayFormat: types.RelayFormatClaude,
+		OriginModelName:         "claude-3-5-sonnet-20241022",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: constant.ChannelTypeOpenRouter,
+		},
+		PriceData: hosttypes.PriceData{
+			ModelRatio:         1.5,
+			CompletionRatio:    1,
+			CacheRatio:         0.1,
+			CacheCreationRatio: 1.25,
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	// cost 按 ModelRatio=1.5、QuotaPerUnit=500000 反推 creation=400：
+	// cost = 0.00276 => (0.00276 - 1000*3e-6 + 200*(3e-6-3e-7)) / 7.5e-7 = 400
+	usage := &dto.Usage{
+		PromptTokens:     1000,
+		CompletionTokens: 0,
+		Cost:             0.00276,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens: 200,
+		},
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.Equal(t, 400, summary.CacheCreationTokens)
+	// prompt 依次扣除读 200、推断写 400。
+	require.Equal(t, 400, summary.PromptTokens)
+	require.Equal(t, 400, summary.InputTokens)
+	// 关键顺序：读 200 + 推断写 400。
+	require.Equal(t, 600, summary.CacheTokensTotal)
+}
+
+// 默认（OpenAI 语义）分支：prompt 扣减读+写缓存后若为负，非缓存输入必须钳制为 0。
+func TestCalculateTextQuotaSummaryClampsNegativeDefaultInputTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-4o",
+		PriceData: hosttypes.PriceData{
+			ModelRatio:         1.25,
+			CompletionRatio:    1,
+			CacheRatio:         0.5,
+			CacheCreationRatio: 1,
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
+		},
+		StartTime: time.Now(),
+	}
+
+	usage := &dto.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 10,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:         80,
+			CachedCreationTokens: 50,
+		},
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	// 输入 = 100 - 80(读) - 50(写) = -30，必须钳制为 0。
+	require.Equal(t, 0, summary.InputTokens)
+	require.Equal(t, 130, summary.CacheTokensTotal)
+}
+
 func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

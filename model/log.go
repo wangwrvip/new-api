@@ -363,13 +363,28 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	createdAt := common.GetTimestamp()
 	// 归一化 token 维度与统一总量：未传维度时保持旧口径（prompt+completion）。
-	inputTokens := params.InputTokens
-	cacheTokens := params.CacheTokens
-	if inputTokens == 0 && cacheTokens == 0 {
-		inputTokens = params.PromptTokens
+	// 上游异常值（如 cached_tokens > prompt_tokens）可能让扣减后的维度为负，
+	// 这里一次性钳制，保证 TokenUsed 恒等于 输入+缓存+输出，并与 quota_data 一致。
+	inputTokens := max(params.InputTokens, 0)
+	cacheTokens := max(params.CacheTokens, 0)
+	if params.InputTokens == 0 && params.CacheTokens == 0 {
+		inputTokens = max(params.PromptTokens, 0)
 	}
-	tokenUsed := inputTokens + cacheTokens + params.CompletionTokens
+	completionTokens := max(params.CompletionTokens, 0)
 	other := params.Other
+	// 缓存读是缓存总量（读+写）中的读分量。logs 行与 quota_data 必须同源：
+	// 优先取上游 other.cache_tokens，缺失时回退调用方传入的归一化读分量，
+	// 再钳制到缓存总量，保证 quota_data.cache_tokens >= cache_read_tokens。
+	cacheReadTokens := params.CacheReadTokens
+	if other != nil {
+		if upstreamRead, ok := other.public["cache_tokens"].(int); ok && upstreamRead > 0 {
+			cacheReadTokens = upstreamRead
+		}
+	}
+	cacheReadTokens = min(max(cacheReadTokens, 0), cacheTokens)
+	// 写分量由总量减去读分量得到，保证 读+写 == 缓存总量。
+	cacheCreationTokens := cacheTokens - cacheReadTokens
+	tokenUsed := inputTokens + cacheTokens + completionTokens
 	content := other.setContent(params.Content)
 	otherStr := other.JSONString()
 	// 判断是否需要记录 IP
@@ -389,7 +404,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		CompletionTokens: params.CompletionTokens,
 		InputTokens:      inputTokens,
 		CacheTokens:      cacheTokens,
-		CacheReadTokens:  params.CacheReadTokens,
+		CacheReadTokens:  cacheReadTokens,
 		TokenName:        params.TokenName,
 		ModelName:        params.ModelName,
 		Quota:            params.Quota,
@@ -413,13 +428,6 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, common.LogText("failed to record log: %s", err.Error()))
 	}
 	if common.DataExportEnabled {
-		var cacheReadTokens, cacheCreationTokens int
-		if other != nil {
-			cacheReadTokens, _ = other.public["cache_tokens"].(int)
-			// The settlement path already normalizes the cache creation total.
-			// Do not add the 5m/1h breakdown again or infer tokens from prices.
-			cacheCreationTokens, _ = other.public["cache_write_tokens"].(int)
-		}
 		LogQuotaData(QuotaDataLogParams{
 			UserID:              userId,
 			Username:            username,
@@ -428,7 +436,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			CreatedAt:           createdAt,
 			TokenUsed:           tokenUsed,
 			InputTokens:         inputTokens,
-			OutputTokens:        params.CompletionTokens,
+			OutputTokens:        completionTokens,
 			CacheTokens:         cacheTokens,
 			CacheReadTokens:     int64(cacheReadTokens),
 			CacheCreationTokens: int64(cacheCreationTokens),

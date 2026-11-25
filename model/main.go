@@ -416,7 +416,32 @@ func migrateClickHouseLogDB() error {
 	if err := LOG_DB.Exec(clickHouseLogCreateTableSQL(ttlDays)).Error; err != nil {
 		return err
 	}
+	if err := upgradeClickHouseLogColumns(); err != nil {
+		return err
+	}
 	return syncClickHouseLogTTL(ttlDays)
+}
+
+// clickHouseLogAddColumnsSQL lists additive column migrations for logs tables
+// created by older versions. CREATE TABLE IF NOT EXISTS never alters an
+// existing table, so newly added Log fields need an explicit ADD COLUMN path.
+// IF NOT EXISTS keeps the migration idempotent on both fresh and existing
+// tables.
+func clickHouseLogAddColumnsSQL() []string {
+	return []string{
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS input_tokens Int32 DEFAULT 0",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS cache_tokens Int32 DEFAULT 0",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS cache_read_tokens Int32 DEFAULT 0",
+	}
+}
+
+func upgradeClickHouseLogColumns() error {
+	for _, statement := range clickHouseLogAddColumnsSQL() {
+		if err := LOG_DB.Exec(statement).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func clickHouseLogTTLDays() int {
@@ -456,6 +481,9 @@ CREATE TABLE IF NOT EXISTS logs (
 	quota Int32 DEFAULT 0,
 	prompt_tokens Int32 DEFAULT 0,
 	completion_tokens Int32 DEFAULT 0,
+	input_tokens Int32 DEFAULT 0,
+	cache_tokens Int32 DEFAULT 0,
+	cache_read_tokens Int32 DEFAULT 0,
 	use_time Int32 DEFAULT 0,
 	is_stream UInt8 DEFAULT 0,
 	channel_id Int32 DEFAULT 0,
