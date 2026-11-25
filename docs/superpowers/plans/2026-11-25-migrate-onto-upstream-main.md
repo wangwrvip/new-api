@@ -218,7 +218,7 @@ Expected: 22 个请求体 + 实际输入计量；后续 P3.4 用同一批请求�
 - Consumes: `backup-before-upstream:CLAUDE.md`（本地中文重写最终版）、`origin/main:CLAUDE.md`（上游新增条款）。
 - Produces: 一份中文 `CLAUDE.md`，同时引用 `relaykit` 与 `tokenkit` 两个独立模块。
 
-- [ ] **Step 1: 提取两版内容并比对**
+- [x] **Step 1: 提取两版内容并比对**
 
 Run:
 ```bash
@@ -228,11 +228,11 @@ diff -u /tmp/claude-upstream.md /tmp/claude-local.md | head -200
 ```
 Expected: 能看到本地中文重写与上游新增章节的差异。
 
-- [ ] **Step 2: 合并写入**
+- [x] **Step 2: 合并写入**
 
 以本地中文版为底稿，并入上游新增条款：`relaykit`/`tokenkit` 模块独立性与验证命令、`pkg/billingexpr/expr.md` 必读门禁、计费安全不变量、三库验证要求、`plugin` 子命令、新增路由/任务架构。保留本地的常用命令与架构速览，但把模块数量更新为三个。
 
-- [ ] **Step 3: 校验无冲突标记与模块引用**
+- [x] **Step 3: 校验无冲突标记与模块引用**
 
 Run:
 ```bash
@@ -241,7 +241,7 @@ grep -n 'relaykit' CLAUDE.md; grep -n 'tokenkit' CLAUDE.md
 ```
 Expected: 第一条无输出（退出 1）；后两条各至少命中一次。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add CLAUDE.md
@@ -322,10 +322,10 @@ git commit -m "chore: 保留 Comet/OpenSpec 变更产物与本地忽略规则"
 
 ### Gate G1: 文档门禁
 
-- [ ] `grep -rnE '^(<<<<<<<|=======|>>>>>>>)' CLAUDE.md docs .agents openspec` 无输出。
-- [ ] `git log --diff-filter=A --oneline -- docs/superpowers/specs/2026-08-31-usage-report-ppt-design.md` 仅一行。
-- [ ] `git status --porcelain` 无输出。
-- [ ] `comet resume-probe . --stdin --json` 仍能识别 `migrate-onto-upstream-main`（只读检查，不推进阶段）。
+- [x] `grep -rnE '^(<<<<<<<|=======|>>>>>>>)' CLAUDE.md docs .agents openspec` 无输出。
+- [x] `git log --diff-filter=A --oneline -- docs/superpowers/specs/2026-08-31-usage-report-ppt-design.md` 仅一行。
+- [x] `git status --porcelain` 无输出。
+- [x] `comet resume-probe . --stdin --json` 仍能识别 `migrate-onto-upstream-main`（只读检查，不推进阶段）。
 
 ---
 
