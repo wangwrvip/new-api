@@ -1,7 +1,6 @@
 package model
 
 import (
-	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -26,8 +25,11 @@ type userDayAggRow struct {
 
 // sumLogsByUserInRange 查询 [startUTC, endUTC) 内消费日志按用户的聚合。
 // 纯参数化条件 + COALESCE/CASE，SQLite/MySQL/PostgreSQL 行为一致。
-// Tokens 为统一含缓存口径：新日志（维度列非 0）= 输入+缓存+输出；
-// 旧日志（维度列全 0，升级前写入）回退 prompt+completion。
+// Tokens 与维度列使用同一回退口径，与写路径（InputTokens/CacheTokens 均未传时
+// 输入回退 PromptTokens、缓存为 0）保持一致：
+// 新日志（维度列非 0）= 输入+缓存+输出；旧日志（维度列全 0，升级前写入）
+// 输入回退 prompt、缓存为 0，总量回退 prompt+completion。
+// 因此恒有 InputTokens + CacheTokens + OutputTokens = Tokens。
 func sumLogsByUserInRange(startUTC int64, endUTC int64) ([]userDayAggRow, error) {
 	var rows []userDayAggRow
 	err := LOG_DB.Table("logs").
@@ -35,7 +37,8 @@ func sumLogsByUserInRange(startUTC int64, endUTC int64) ([]userDayAggRow, error)
 			"COALESCE(sum(CASE WHEN input_tokens > 0 OR cache_tokens > 0 "+
 			"THEN input_tokens + cache_tokens + completion_tokens "+
 			"ELSE prompt_tokens + completion_tokens END), 0) as tokens, "+
-			"COALESCE(sum(input_tokens), 0) as input_tokens, "+
+			"COALESCE(sum(CASE WHEN input_tokens > 0 OR cache_tokens > 0 "+
+			"THEN input_tokens ELSE prompt_tokens END), 0) as input_tokens, "+
 			"COALESCE(sum(completion_tokens), 0) as output_tokens, "+
 			"COALESCE(sum(cache_tokens), 0) as cache_tokens, "+
 			"COALESCE(sum(cache_read_tokens), 0) as cache_read_tokens").
@@ -43,8 +46,8 @@ func sumLogsByUserInRange(startUTC int64, endUTC int64) ([]userDayAggRow, error)
 		Group("user_id, username").
 		Scan(&rows).Error
 	if err != nil {
-		common.SysError("failed to query usage report rows: " + err.Error())
-		return nil, errors.New("查询使用报告数据失败")
+		common.SysError(common.LogText("failed to query usage report rows: %s", err.Error()))
+		return nil, common.NewMessage("Failed to query usage report data")
 	}
 	return rows, nil
 }
@@ -63,7 +66,8 @@ type periodUserAgg struct {
 }
 
 // aggregateDays 把逐天聚合行（rowsByDay 与 window.Days 一一对应）累计为周期数据。
-// 每个有记录的自然天计入该用户 activeDays；dayUsers 统计当天活跃用户数。
+// 每个有记录的自然天计入该用户 activeDays：同一天同一用户因改名等原因聚合出
+// 多行时只计一天，避免活跃天数超过周期天数；dayUsers 统计当天活跃用户数。
 func aggregateDays(window periodWindow, rowsByDay [][]userDayAggRow) (
 	daily []dto.UsageReportDaily,
 	users map[int]*periodUserAgg,
@@ -87,10 +91,12 @@ func aggregateDays(window periodWindow, rowsByDay [][]userDayAggRow) (
 			user.outputTokens += row.OutputTokens
 			user.cacheTokens += row.CacheTokens
 			user.cacheReadTokens += row.CacheReadTokens
-			user.activeDays++
+			if !dayUsers[row.UserId] {
+				user.activeDays++
+				dayUsers[row.UserId] = true
+			}
 			item.Requests += row.Requests
 			item.Quota += row.Quota
-			dayUsers[row.UserId] = true
 		}
 		item.ActiveUsers = int64(len(dayUsers))
 		daily = append(daily, item)
@@ -134,8 +140,8 @@ func getAllUsers() (map[int]userReportIdentity, error) {
 		Department  string
 	}
 	if err := DB.Model(&User{}).Select("id, username, display_name, department").Scan(&rows).Error; err != nil {
-		common.SysError("failed to query usage report users: " + err.Error())
-		return nil, errors.New("查询使用报告用户失败")
+		common.SysError(common.LogText("failed to query usage report users: %s", err.Error()))
+		return nil, common.NewMessage("Failed to query usage report users")
 	}
 	for _, row := range rows {
 		allUsers[row.Id] = userReportIdentity{username: row.Username, displayName: row.DisplayName, department: normalizeDepartment(row.Department)}

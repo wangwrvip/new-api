@@ -363,8 +363,87 @@ func TestSumLogsByUserInRangeTokenDimensions(t *testing.T) {
 
 	// 旧 120 + 新 1200 + 新 2987
 	assert.Equal(t, int64(120+1200+2987), agg[0].Tokens)
-	assert.Equal(t, int64(850+172), agg[0].InputTokens)
+	// 旧日志输入回退 prompt（100），新日志用维度列（850 / 172）：
+	// 维度之和 = 1122 + 2582 + 603 = 4307，与 Tokens 相等。
+	assert.Equal(t, int64(100+850+172), agg[0].InputTokens)
 	assert.Equal(t, int64(20+200+383), agg[0].OutputTokens)
 	assert.Equal(t, int64(150+2432), agg[0].CacheTokens)
 	assert.Equal(t, int64(100+2432), agg[0].CacheReadTokens)
+	assert.Equal(t, agg[0].Tokens, agg[0].InputTokens+agg[0].CacheTokens+agg[0].OutputTokens)
+}
+
+// 新旧日志混合时，维度列必须与总量使用同一回退口径：
+// 仅旧日志、仅新日志、同一用户新旧混合三种情况下都满足
+// InputTokens + CacheTokens + OutputTokens = Tokens。
+func TestSumLogsByUserInRangeMixedTokenInvariant(t *testing.T) {
+	truncateTables(t)
+	dayStart := int64(1700100000)
+	dayEnd := dayStart + 86400
+
+	rows := []Log{
+		// user 1：升级前旧日志（维度列全 0），输入回退 prompt、缓存为 0。
+		{UserId: 1, Username: "old_only", Type: LogTypeConsume, CreatedAt: dayStart + 10,
+			PromptTokens: 100, CompletionTokens: 20},
+		// user 2：升级后新日志（维度列非 0）。
+		{UserId: 2, Username: "new_only", Type: LogTypeConsume, CreatedAt: dayStart + 20,
+			PromptTokens: 1000, CompletionTokens: 200, InputTokens: 850, CacheTokens: 150},
+		// user 3：同一用户新旧混合。
+		{UserId: 3, Username: "mixed", Type: LogTypeConsume, CreatedAt: dayStart + 30,
+			PromptTokens: 7, CompletionTokens: 3},
+		{UserId: 3, Username: "mixed", Type: LogTypeConsume, CreatedAt: dayStart + 40,
+			PromptTokens: 1000, CompletionTokens: 10, InputTokens: 40, CacheTokens: 60},
+	}
+	for i := range rows {
+		require.NoError(t, DB.Create(&rows[i]).Error)
+	}
+
+	agg, err := sumLogsByUserInRange(dayStart, dayEnd)
+	require.NoError(t, err)
+	require.Len(t, agg, 3)
+
+	byUser := make(map[int]userDayAggRow, len(agg))
+	for _, row := range agg {
+		byUser[row.UserId] = row
+	}
+
+	assert.Equal(t, int64(120), byUser[1].Tokens)
+	assert.Equal(t, int64(100), byUser[1].InputTokens)
+	assert.Zero(t, byUser[1].CacheTokens)
+	assert.Equal(t, int64(20), byUser[1].OutputTokens)
+
+	assert.Equal(t, int64(1200), byUser[2].Tokens)
+	assert.Equal(t, int64(850), byUser[2].InputTokens)
+	assert.Equal(t, int64(150), byUser[2].CacheTokens)
+	assert.Equal(t, int64(200), byUser[2].OutputTokens)
+
+	// 旧 10 + 新 110
+	assert.Equal(t, int64(120), byUser[3].Tokens)
+	assert.Equal(t, int64(7+40), byUser[3].InputTokens)
+	assert.Equal(t, int64(60), byUser[3].CacheTokens)
+	assert.Equal(t, int64(3+10), byUser[3].OutputTokens)
+
+	for userId, row := range byUser {
+		assert.Equalf(t, row.Tokens, row.InputTokens+row.CacheTokens+row.OutputTokens,
+			"user %d: input+cache+output must equal tokens", userId)
+	}
+}
+
+// 同一用户在同一天因改名聚合出多行时，活跃天数只计一天。
+func TestAssembleUsageReportActiveDayOncePerUser(t *testing.T) {
+	curWindow := usageReportTestWindow(t, false)
+	prevWindow := usageReportTestWindow(t, true)
+	curRows := make([][]userDayAggRow, 7)
+	curRows[0] = []userDayAggRow{
+		{UserId: 1, Username: "alice", Requests: 1, Quota: 10, Tokens: 10},
+		{UserId: 1, Username: "alice_new", Requests: 2, Quota: 20, Tokens: 20},
+	}
+	curRows[1] = []userDayAggRow{
+		{UserId: 1, Username: "alice_new", Requests: 1, Quota: 10, Tokens: 10},
+	}
+
+	report := assembleUsageReport("week", curWindow, prevWindow, curRows, make([][]userDayAggRow, 7), nil)
+
+	require.Len(t, report.Users, 1)
+	assert.Equal(t, 2, report.Users[0].ActiveDays)
+	assert.Equal(t, int64(4), report.Users[0].Requests)
 }
