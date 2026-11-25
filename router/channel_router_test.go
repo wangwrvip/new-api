@@ -50,6 +50,10 @@ func TestPluginLoginRoutesUseExpectedPermissions(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodGet, "/:id/plugin_credentials", authz.ChannelRead, controller.GetPluginCredentials)
 }
 
+func TestChannelGlmUsageRoutePermission(t *testing.T) {
+	assertChannelRoutePermission(t, http.MethodGet, "/glm/usage", authz.ChannelRead, controller.GetGlmChannelsUsage)
+}
+
 func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
