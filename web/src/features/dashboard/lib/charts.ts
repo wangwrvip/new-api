@@ -27,7 +27,17 @@ import type {
 import { getCurrencyDisplay } from '@/lib/currency'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 
+import { cacheHitRate } from './stats'
+
 type TFunction = (key: string) => string
+type ModelMetric = {
+  quota: number
+  count: number
+  tokens: number
+  input: number
+  cache: number
+  cacheRead: number
+}
 type TooltipLineItem = {
   key: string
   value: string | number
@@ -207,6 +217,18 @@ export function processChartData(
           text: tt('Call Count Ranking'),
         },
       },
+      spec_cache_rate_bar: {
+        type: 'bar',
+        data: [{ id: 'cacheRateData', values: [] }],
+        xField: 'Model',
+        yField: 'Rate',
+        seriesField: 'Model',
+        legends: { visible: true, selectMode: 'single' },
+        title: {
+          visible: true,
+          text: tt('Cache Hit Ranking'),
+        },
+      },
       totalQuotaDisplay: formatQuotaTotal(0),
       totalCountDisplay: formatInt(0),
     }
@@ -216,14 +238,8 @@ export function processChartData(
   const quotaPerUnit = config.quotaPerUnit
 
   // Aggregate all metrics by time and model
-  const timeModelMap = new Map<
-    string,
-    Map<string, { quota: number; count: number; tokens: number }>
-  >()
-  const modelTotalsMap = new Map<
-    string,
-    { quota: number; count: number; tokens: number }
-  >()
+  const timeModelMap = new Map<string, Map<string, ModelMetric>>()
+  const modelTotalsMap = new Map<string, ModelMetric>()
   const timeTimestamps = new Map<string, number>()
 
   data.forEach((item) => {
@@ -237,6 +253,9 @@ export function processChartData(
     const quota = Number(item.quota) || 0
     const count = Number(item.count) || 0
     const tokens = Number(item.token_used) || 0
+    const input = Number(item.input_tokens) || 0
+    const cache = Number(item.cache_tokens) || 0
+    const cacheRead = Number(item.cache_read_tokens) || 0
 
     // Aggregate by time and model
     let modelMap = timeModelMap.get(timeKey)
@@ -244,23 +263,39 @@ export function processChartData(
       modelMap = new Map()
       timeModelMap.set(timeKey, modelMap)
     }
-    const existing = modelMap.get(model) || { quota: 0, count: 0, tokens: 0 }
+    const existing: ModelMetric = modelMap.get(model) || {
+      quota: 0,
+      count: 0,
+      tokens: 0,
+      input: 0,
+      cache: 0,
+      cacheRead: 0,
+    }
     modelMap.set(model, {
       quota: existing.quota + quota,
       count: existing.count + count,
       tokens: existing.tokens + tokens,
+      input: existing.input + input,
+      cache: existing.cache + cache,
+      cacheRead: existing.cacheRead + cacheRead,
     })
 
     // Calculate totals
-    const totalExisting = modelTotalsMap.get(model) || {
+    const totalExisting: ModelMetric = modelTotalsMap.get(model) || {
       quota: 0,
       count: 0,
       tokens: 0,
+      input: 0,
+      cache: 0,
+      cacheRead: 0,
     }
     modelTotalsMap.set(model, {
       quota: totalExisting.quota + quota,
       count: totalExisting.count + count,
       tokens: totalExisting.tokens + tokens,
+      input: totalExisting.input + input,
+      cache: totalExisting.cache + cache,
+      cacheRead: totalExisting.cacheRead + cacheRead,
     })
   })
 
@@ -454,6 +489,21 @@ export function processChartData(
   } else {
     rankValues = allRankValues
   }
+
+  // Cache hit ranking: rate = cache read / input-side tokens (read + write + non-cached).
+  // Models without input-side tokens (legacy rows) carry no hit signal and are excluded.
+  const cacheRateValues = [...modelTotalsMap.entries()]
+    .map(([model, stats]) => ({
+      Model: model,
+      Rate:
+        Math.round(
+          cacheHitRate(stats.cacheRead, stats.input, stats.cache) * 1000
+        ) / 10,
+      CacheRead: stats.cacheRead,
+      InputSide: stats.input + stats.cache,
+    }))
+    .filter((item) => item.InputSide > 0)
+    .sort((a, b) => b.Rate - a.Rate)
 
   return {
     spec_pie: {
@@ -688,6 +738,58 @@ export function processChartData(
       background: { fill: 'transparent' },
       animation: true,
     },
+    spec_cache_rate_bar: {
+      type: 'bar',
+      data: [{ id: 'cacheRateData', values: cacheRateValues }],
+      xField: 'Model',
+      yField: 'Rate',
+      seriesField: 'Model',
+      legends: { visible: false, selectMode: 'single' },
+      color: modelColor,
+      title: {
+        visible: true,
+        text: tt('Cache Hit Ranking'),
+      },
+      bar: {
+        state: {
+          hover: { stroke: '#000', lineWidth: 1 },
+        },
+      },
+      label: {
+        visible: true,
+        position: 'outside',
+        formatMethod: (value: number) => `${value}%`,
+        style: { fontSize: 11 },
+      },
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        {
+          orient: 'left',
+          type: 'linear',
+          label: {
+            formatMethod: (value: number) => `${value}%`,
+          },
+        },
+      ],
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: (datum: Record<string, unknown>) =>
+                `${tt('Cache Hit Rate')} ${datum?.Model ?? ''}`,
+              value: (datum: Record<string, unknown>) => {
+                const rate = Number(datum?.Rate) || 0
+                const cacheRead = Number(datum?.CacheRead) || 0
+                const inputSide = Number(datum?.InputSide) || 0
+                return `${formatInt(cacheRead)} / ${formatInt(inputSide)} (${rate}%)`
+              },
+            },
+          ],
+        },
+      },
+      background: { fill: 'transparent' },
+      animation: true,
+    },
     totalQuotaDisplay: formatQuotaTotal(totalQuotaRaw),
     totalCountDisplay: formatInt(totalTimes),
   }
@@ -717,6 +819,8 @@ export function processUserChartData(
   const quotaPerUnit = config.quotaPerUnit
 
   const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
+  const formatInt = (value: number) =>
+    Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
 
   const emptyResult: ProcessedUserChartData = {
     spec_user_rank: {
@@ -749,6 +853,22 @@ export function processUserChartData(
       legends: { visible: true, selectMode: 'single' },
       color: { type: 'ordinal', range: USER_COLORS },
       point: { visible: false },
+      background: { fill: 'transparent' },
+    },
+    spec_user_cache_rate: {
+      type: 'bar',
+      data: [{ id: 'userCacheRateData', values: [] }],
+      xField: 'Rate',
+      yField: 'User',
+      seriesField: 'User',
+      direction: 'horizontal',
+      title: {
+        visible: true,
+        text: tt('User Cache Hit Rate'),
+        subtext: tt('No data available'),
+      },
+      legends: { visible: false },
+      color: { type: 'ordinal', range: USER_COLORS },
       background: { fill: 'transparent' },
     },
   }
@@ -819,6 +939,35 @@ export function processUserChartData(
       })
     })
   })
+
+  // Per-user cache hit rate: read / input-side tokens, ranked desc within the limit.
+  // Users without input-side tokens (legacy rows) are excluded.
+  const userCacheStats = new Map<
+    string,
+    { read: number; input: number; cache: number }
+  >()
+  data.forEach((item) => {
+    const username = item.username || 'unknown'
+    const prev = userCacheStats.get(username) || { read: 0, input: 0, cache: 0 }
+    userCacheStats.set(username, {
+      read: prev.read + (Number(item.cache_read_tokens) || 0),
+      input: prev.input + (Number(item.input_tokens) || 0),
+      cache: prev.cache + (Number(item.cache_tokens) || 0),
+    })
+  })
+
+  const userCacheRateValues = [...userCacheStats.entries()]
+    .map(([user, stats]) => ({
+      User: user,
+      Rate:
+        Math.round(cacheHitRate(stats.read, stats.input, stats.cache) * 1000) /
+        10,
+      CacheRead: stats.read,
+      InputSide: stats.input + stats.cache,
+    }))
+    .filter((item) => item.InputSide > 0)
+    .sort((a, b) => b.Rate - a.Rate)
+    .slice(0, limit)
 
   return {
     spec_user_rank: {
@@ -955,6 +1104,56 @@ export function processUserChartData(
       },
       point: { visible: false },
       color: { specified: userColorMap },
+      background: { fill: 'transparent' },
+      animation: true,
+    },
+    spec_user_cache_rate: {
+      type: 'bar',
+      data: [{ id: 'userCacheRateData', values: userCacheRateValues }],
+      xField: 'Rate',
+      yField: 'User',
+      seriesField: 'User',
+      direction: 'horizontal',
+      title: {
+        visible: true,
+        text: tt('User Cache Hit Rate'),
+      },
+      legends: { visible: false },
+      bar: {
+        state: { hover: { stroke: '#000', lineWidth: 1 } },
+      },
+      label: {
+        visible: true,
+        position: 'right',
+        formatMethod: (value: number) => `${value}%`,
+        style: { fontSize: 11 },
+      },
+      axes: [
+        { orient: 'left', type: 'band' },
+        {
+          orient: 'bottom',
+          type: 'linear',
+          label: {
+            formatMethod: (value: number) => `${value}%`,
+          },
+        },
+      ],
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: (datum: Record<string, unknown>) => datum?.User,
+              value: (datum: Record<string, unknown>) => {
+                const rate = Number(datum?.Rate) || 0
+                const cacheRead = Number(datum?.CacheRead) || 0
+                const inputSide = Number(datum?.InputSide) || 0
+                return `${formatInt(cacheRead)} / ${formatInt(inputSide)} (${rate}%)`
+              },
+            },
+          ],
+        },
+      },
+      color: { type: 'ordinal', range: USER_COLORS },
       background: { fill: 'transparent' },
       animation: true,
     },

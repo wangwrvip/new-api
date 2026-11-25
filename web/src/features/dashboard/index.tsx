@@ -41,13 +41,14 @@ import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
-  getDefaultDays,
+  getDefaultUserRangePreset,
   getSavedChartPreferences,
   getSavedGranularity,
   saveChartPreferences,
 } from './lib'
 import {
   type DashboardSectionId,
+  DASHBOARD_ADMIN_ONLY_SECTIONS,
   DASHBOARD_DEFAULT_SECTION,
   DASHBOARD_SECTION_IDS,
 } from './section-registry'
@@ -66,6 +67,7 @@ const LOG_STAT_CARD_FALLBACK_KEYS = [
   'tokens',
   'cache-read',
   'cache-creation',
+  'cache-hit',
   'average-rpm',
   'average-tpm',
 ] as const
@@ -109,6 +111,12 @@ const LazyUserCharts = lazy(() =>
   }))
 )
 
+const LazyUsageReportSection = lazy(() =>
+  import('./usage-report').then((m) => ({
+    default: m.UsageReportSection,
+  }))
+)
+
 const LazyFlowCharts = lazy(() =>
   import('./components/flow/flow-charts').then((m) => ({
     default: m.FlowCharts,
@@ -118,7 +126,7 @@ const LazyFlowCharts = lazy(() =>
 function LogStatCardsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-7'>
+      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-8'>
         {LOG_STAT_CARD_FALLBACK_KEYS.map((key, index) => (
           <div
             key={key}
@@ -194,6 +202,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   users: {
     titleKey: 'User Analytics',
   },
+  'usage-report': {
+    titleKey: 'Usage Report',
+  },
 }
 
 export function Dashboard() {
@@ -216,7 +227,7 @@ export function Dashboard() {
       const granularity = getSavedGranularity()
       return {
         timeGranularity: granularity,
-        selectedRange: getDefaultDays(granularity),
+        selectedRange: getDefaultUserRangePreset(granularity),
         topUserLimit: 10,
       }
     }
@@ -253,7 +264,9 @@ export function Dashboard() {
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+        (section) =>
+          section !== 'overview' &&
+          (!DASHBOARD_ADMIN_ONLY_SECTIONS.has(section) || isAdmin)
       ),
     [isAdmin]
   )
@@ -403,6 +416,13 @@ export function Dashboard() {
                   filters={userChartsFilters}
                   onFiltersChange={setUserChartsFilters}
                 />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'usage-report' && (
+            <FadeIn>
+              <Suspense fallback={<Skeleton className='h-96 w-full' />}>
+                <LazyUsageReportSection />
               </Suspense>
             </FadeIn>
           )}

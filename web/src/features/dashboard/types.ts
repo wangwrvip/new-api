@@ -28,6 +28,11 @@ export interface QuotaDataItem {
   username?: string
   model_name?: string
   created_at: number
+  // 归一化 token 维度：非缓存输入/输出/缓存读+写合计；历史行为 0
+  input_tokens?: number
+  output_tokens?: number
+  cache_tokens?: number
+  // 缓存命中的读分量：命中率 = 读 / (输入+缓存)；历史行为 0
   cache_read_tokens?: number
   cache_creation_tokens?: number
   token_used?: number
@@ -195,7 +200,7 @@ export interface DashboardFilters {
 
 export type ConsumptionDistributionChartType = 'bar' | 'area'
 
-export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top'
+export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top' | 'cache'
 
 export interface DashboardChartPreferences {
   consumptionDistributionChart: ConsumptionDistributionChartType
@@ -204,11 +209,24 @@ export interface DashboardChartPreferences {
   defaultTimeGranularity: TimeGranularity
 }
 
+// Time-range preset for the User Analytics section. Rolling presets are day
+// windows ending at the current moment; calendar presets map to fixed calendar
+// periods (this/last week, this/last month).
+export type UserTimeRangePreset =
+  | '1d'
+  | '7d'
+  | '14d'
+  | '29d'
+  | 'this_week'
+  | 'last_week'
+  | 'this_month'
+  | 'last_month'
+
 // User analytics selections are held by the dashboard parent so they survive
 // switching between dashboard sub-sections, matching the model/flow filters.
 export interface UserChartsFilters {
   timeGranularity: TimeGranularity
-  selectedRange: number
+  selectedRange: UserTimeRangePreset
   topUserLimit: number
 }
 
@@ -244,6 +262,7 @@ export interface ProcessedChartData {
   spec_area: VChartSpec
   spec_model_line: VChartSpec
   spec_rank_bar: VChartSpec
+  spec_cache_rate_bar: VChartSpec
   totalQuotaDisplay: string
   totalCountDisplay: string
 }
@@ -251,6 +270,7 @@ export interface ProcessedChartData {
 export interface ProcessedUserChartData {
   spec_user_rank: VChartSpec
   spec_user_trend: VChartSpec
+  spec_user_cache_rate: VChartSpec
 }
 
 // ============================================================================

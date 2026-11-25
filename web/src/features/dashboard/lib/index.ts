@@ -32,6 +32,11 @@ export {
   openExternalSpeedTest,
   getDefaultPingStatus,
 } from './api-info'
+export {
+  USER_TIME_RANGE_PRESETS,
+  getUserRangeDates,
+  getDefaultUserRangePreset,
+} from './user-range'
 export { processChartData, processUserChartData } from './charts'
 export {
   buildDashboardFlowData,
@@ -40,5 +45,5 @@ export {
   flowSankeyDatumValue,
   getFlowStages,
 } from './flow'
-export { safeDivide, calculateDashboardStats } from './stats'
+export { safeDivide, cacheHitRate, calculateDashboardStats } from './stats'
 export { getPreviewText } from './text'

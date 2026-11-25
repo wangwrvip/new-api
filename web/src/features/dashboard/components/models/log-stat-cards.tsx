@@ -25,6 +25,7 @@ import { getUserQuotaDates } from '@/features/dashboard/api'
 import { useModelStatCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import {
   buildQueryParams,
+  cacheHitRate,
   calculateDashboardStats,
   getDefaultDays,
 } from '@/features/dashboard/lib'
@@ -58,8 +59,24 @@ function formatStatNumber(value: number, locale: Intl.LocalesArgument) {
   }
 }
 
+function formatCardValue(
+  key: string,
+  rawValue: number,
+  locale: Intl.LocalesArgument
+) {
+  if (key === 'quota') {
+    const quotaText = formatQuota(rawValue)
+    return { displayValue: quotaText, fullValue: quotaText }
+  }
+  if (key === 'cacheHit') {
+    const percent = `${(rawValue * 100).toFixed(1)}%`
+    return { displayValue: percent, fullValue: percent }
+  }
+  return formatStatNumber(rawValue, locale)
+}
+
 export function LogStatCards(props: LogStatCardsProps) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const statCardsConfig = useModelStatCardsConfig()
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = !!(user?.role && user.role >= 10)
@@ -117,6 +134,11 @@ export function LogStatCards(props: LogStatCardsProps) {
     rpm: stats?.totalCount ?? 0,
     quota: stats?.totalQuota ?? 0,
     tpm: stats?.totalTokens ?? 0,
+    cacheHitRate: cacheHitRate(
+      stats?.cacheReadTokens ?? 0,
+      stats?.inputTokens ?? 0,
+      stats?.cacheTokens ?? 0
+    ),
     cacheRead: stats?.totalCacheReadTokens ?? 0,
     cacheCreation: stats?.totalCacheCreationTokens ?? 0,
   }
@@ -124,20 +146,36 @@ export function LogStatCards(props: LogStatCardsProps) {
   const items = statCardsConfig.map((config) => {
     const rawValue = config.getValue(adaptedStats, timeRangeMinutes)
     const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
-    const formatted =
-      config.key === 'quota'
-        ? {
-            displayValue: formatQuota(rawValue),
-            fullValue: formatQuota(rawValue),
-          }
-        : formatStatNumber(rawValue, locale)
+    const formatted = formatCardValue(config.key, rawValue, locale)
+
+    // Total Tokens 卡片：主数字下展示 输入/输出/缓存 分维度（有维度数据时）
+    let breakdown: string | undefined
+    if (config.key === 'tokens') {
+      const input = stats?.inputTokens ?? 0
+      const output = stats?.outputTokens ?? 0
+      const cache = stats?.cacheTokens ?? 0
+      if (input + output + cache > 0) {
+        breakdown = [
+          `${t('Input')} ${formatStatNumber(input, locale).displayValue}`,
+          `${t('Output')} ${formatStatNumber(output, locale).displayValue}`,
+          `${t('Cache')} ${formatStatNumber(cache, locale).displayValue}`,
+        ].join(' · ')
+      }
+    }
+
+    // 缓存命中卡片：主数字为命中率，副行展示命中的 token 数
+    if (config.key === 'cacheHit') {
+      breakdown = `${t('Cache hit tokens')} ${
+        formatStatNumber(stats?.cacheReadTokens ?? 0, locale).displayValue
+      }`
+    }
 
     return {
       key: config.key,
       title: config.title,
       value: formatted.displayValue,
       fullValue: formatted.fullValue,
-      desc: config.description,
+      desc: breakdown ?? config.description,
       icon: config.icon,
       iconTone: config.iconTone,
     }
@@ -145,7 +183,7 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-7'>
+      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-8'>
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent

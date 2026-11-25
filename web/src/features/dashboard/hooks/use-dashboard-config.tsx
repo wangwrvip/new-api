@@ -27,6 +27,7 @@ import {
   Flame,
   TrendingUp,
   Activity,
+  DatabaseZap,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -70,6 +71,15 @@ export function useModelStatCardsConfig(): StatCardConfig[] {
       icon: Layers,
       iconTone: 'chart-4',
       getValue: (stat) => stat?.tpm ?? 0,
+    },
+    {
+      key: 'cacheHit',
+      title: t('Cache Hit Rate'),
+      description: t('Statistical cache hit rate'),
+      icon: DatabaseZap,
+      iconTone: 'chart-1',
+      // 命中率 = 缓存读 / 输入侧总量（读+写+非缓存输入），0..1 小数由卡片层格式化为百分比
+      getValue: (stat) => stat?.cacheHitRate ?? 0,
     },
     {
       key: 'cacheRead',

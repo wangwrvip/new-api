@@ -169,8 +169,12 @@ export function formatChartTime(
   if (granularity === 'hour') {
     result += ` ${d.format('HH')}:00`
   } else if (granularity === 'week') {
-    const weekEnd = d.add(6, 'day')
-    result += ` - ${weekEnd.format('MM-DD')}`
+    // Bucket by calendar week: every day in the same week shares one label
+    // (weeks start on Sunday, matching the shared date picker), so trend
+    // aggregation groups full weeks instead of per-day rolling windows.
+    const weekStart = d.startOf('week')
+    const weekEnd = weekStart.add(6, 'day')
+    result = `${weekStart.format('MM-DD')} - ${weekEnd.format('MM-DD')}`
   }
 
   return result

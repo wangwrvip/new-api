@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { describe, expect, test } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import type { TimeGranularity } from '@/lib/time'
@@ -64,14 +64,14 @@ const cases: Array<{
     start: '2025-11-29T12:00:00',
     interval: 604800,
     labels: [
-      '11-29 - 12-05',
-      '12-06 - 12-12',
-      '12-13 - 12-19',
-      '12-20 - 12-26',
-      '12-27 - 01-02',
-      '01-03 - 01-09',
-      '01-10 - 01-16',
-      '01-17 - 01-23',
+      '11-23 - 11-29',
+      '11-30 - 12-06',
+      '12-07 - 12-13',
+      '12-14 - 12-20',
+      '12-21 - 12-27',
+      '12-28 - 01-03',
+      '01-04 - 01-10',
+      '01-11 - 01-17',
     ],
   },
 ]
@@ -152,5 +152,115 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
         )
       ).toEqual([0, 0, 0, 0, 0, 0, 8])
     }
+  })
+})
+
+interface CacheRateDatum {
+  Model?: string
+  User?: string
+  Rate: number
+  CacheRead: number
+  InputSide: number
+}
+
+function cacheRateValues(spec: unknown): CacheRateDatum[] {
+  const values = (spec as { data: Array<{ values: unknown[] }> }).data[0]
+    .values as CacheRateDatum[]
+  return values
+}
+
+describe('processChartData cache hit ranking', () => {
+  it('ranks models by cache hit rate and excludes models without input-side tokens', () => {
+    const data: QuotaDataItem[] = [
+      {
+        created_at: 1700000000,
+        model_name: 'model-low',
+        input_tokens: 800,
+        output_tokens: 100,
+        cache_tokens: 200,
+        cache_read_tokens: 150,
+        token_used: 1100,
+        count: 2,
+        quota: 10,
+      },
+      {
+        created_at: 1700000000,
+        model_name: 'model-high',
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_tokens: 900,
+        cache_read_tokens: 850,
+        token_used: 1050,
+        count: 3,
+        quota: 20,
+      },
+      {
+        created_at: 1700000000,
+        // 旧数据：无维度列，输入侧为 0，不应进入命中率排行
+        model_name: 'model-legacy',
+        token_used: 500,
+        count: 5,
+        quota: 30,
+      },
+    ]
+
+    const result = processChartData(data, 'hour')
+    const values = cacheRateValues(result.spec_cache_rate_bar)
+
+    expect(values.map((v) => v.Model)).toEqual(['model-high', 'model-low'])
+    // model-high: 850 / (100 + 900) = 85
+    expect(values[0].Rate).toBe(85)
+    expect(values[0].CacheRead).toBe(850)
+    expect(values[0].InputSide).toBe(1000)
+    // model-low: 150 / (800 + 200) = 15
+    expect(values[1].Rate).toBe(15)
+  })
+
+  it('emits an empty cache ranking when there is no data', () => {
+    const result = processChartData([], 'hour')
+
+    expect(cacheRateValues(result.spec_cache_rate_bar)).toEqual([])
+  })
+})
+
+describe('processUserChartData cache hit rate', () => {
+  it('ranks users by hit rate within the limit', () => {
+    const data: QuotaDataItem[] = [
+      {
+        created_at: 1700000000,
+        username: 'alice',
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_tokens: 900,
+        cache_read_tokens: 850,
+        token_used: 1050,
+        count: 3,
+        quota: 20,
+      },
+      {
+        created_at: 1700000000,
+        username: 'bob',
+        input_tokens: 800,
+        output_tokens: 100,
+        cache_tokens: 200,
+        cache_read_tokens: 150,
+        token_used: 1100,
+        count: 2,
+        quota: 10,
+      },
+    ]
+
+    const result = processUserChartData(data, 'hour', undefined, 10)
+    const values = cacheRateValues(result.spec_user_cache_rate)
+
+    expect(values.map((v) => v.User)).toEqual(['alice', 'bob'])
+    expect(values[0].Rate).toBe(85)
+    expect(values[1].Rate).toBe(15)
+  })
+
+  it('emits an empty user cache ranking when there is no data', () => {
+    const result = processUserChartData([], 'hour')
+
+    expect(cacheRateValues(result.spec_user_cache_rate)).toEqual([])
   })
 })

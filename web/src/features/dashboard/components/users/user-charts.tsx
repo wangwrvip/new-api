@@ -27,21 +27,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
+import { TIME_GRANULARITY_OPTIONS } from '@/features/dashboard/constants'
 import {
-  TIME_GRANULARITY_OPTIONS,
-  TIME_RANGE_PRESETS,
-} from '@/features/dashboard/constants'
-import {
-  getDefaultDays,
+  USER_TIME_RANGE_PRESETS,
+  getUserRangeDates,
+  getDefaultUserRangePreset,
   saveGranularity,
   processUserChartData,
 } from '@/features/dashboard/lib'
 import type {
   ProcessedUserChartData,
   UserChartsFilters,
+  UserTimeRangePreset,
 } from '@/features/dashboard/types'
 import { requireServerSuccess } from '@/lib/server-error-message'
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import type { TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
 
 let themeManagerPromise: Promise<
@@ -62,6 +62,11 @@ const USER_CHARTS: {
     value: 'trend',
     labelKey: 'User Consumption Trend',
     specKey: 'spec_user_trend',
+  },
+  {
+    value: 'cacheRate',
+    labelKey: 'User Cache Hit Rate',
+    specKey: 'spec_user_cache_rate',
   },
 ]
 
@@ -88,7 +93,7 @@ export function UserCharts(props: UserChartsProps) {
   const onFiltersChange = props.onFiltersChange
 
   const timeRange = useMemo(() => {
-    const { start, end } = getRollingDateRange(selectedRange)
+    const { start, end } = getUserRangeDates(selectedRange)
     return {
       start_timestamp: Math.floor(start.getTime() / 1000),
       end_timestamp: Math.floor(end.getTime() / 1000),
@@ -96,8 +101,8 @@ export function UserCharts(props: UserChartsProps) {
   }, [selectedRange])
 
   const handleRangeChange = useCallback(
-    (days: number) => {
-      onFiltersChange({ ...props.filters, selectedRange: days })
+    (preset: UserTimeRangePreset) => {
+      onFiltersChange({ ...props.filters, selectedRange: preset })
     },
     [onFiltersChange, props.filters]
   )
@@ -108,7 +113,7 @@ export function UserCharts(props: UserChartsProps) {
       onFiltersChange({
         ...props.filters,
         timeGranularity: g,
-        selectedRange: getDefaultDays(g),
+        selectedRange: getDefaultUserRangePreset(g),
       })
     },
     [onFiltersChange, props.filters]
@@ -160,18 +165,20 @@ export function UserCharts(props: UserChartsProps) {
     <div className='space-y-3'>
       <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
         <Tabs
-          value={String(selectedRange)}
-          onValueChange={(value) => handleRangeChange(Number(value))}
+          value={selectedRange}
+          onValueChange={(value) =>
+            handleRangeChange(value as UserTimeRangePreset)
+          }
           className='shrink-0'
         >
           <TabsList>
-            {TIME_RANGE_PRESETS.map((preset) => (
+            {USER_TIME_RANGE_PRESETS.map((preset) => (
               <TabsTrigger
-                key={preset.days}
-                value={String(preset.days)}
+                key={preset.id}
+                value={preset.id}
                 className='px-2.5 text-xs'
               >
-                {t(preset.label)}
+                {t(preset.labelKey)}
               </TabsTrigger>
             ))}
           </TabsList>
