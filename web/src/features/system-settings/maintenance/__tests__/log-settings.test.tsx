@@ -33,7 +33,12 @@ import { api } from '@/lib/api'
 import { SettingsPageProvider } from '../../components/settings-page-context'
 import { LogSettingsSection } from '../log-settings-section'
 
-function Fixture() {
+type PreviewDefaults = {
+  enabled?: boolean
+  maxTokens?: number
+}
+
+function Fixture(props: PreviewDefaults) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
   return (
     <>
@@ -42,6 +47,8 @@ function Fixture() {
         <LogSettingsSection
           defaultValues={{
             LogConsumeEnabled: true,
+            RequestPreviewEnabled: props.enabled,
+            RequestPreviewMaxTokens: props.maxTokens,
             'log_setting.user_export_enabled': true,
             'log_setting.max_range_days': 30,
             'system_task_setting.retention_days': 30,
@@ -52,18 +59,26 @@ function Fixture() {
   )
 }
 
-async function renderSettings() {
+async function renderSettings(preview: PreviewDefaults = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   render(
     <QueryClientProvider client={client}>
-      <Fixture />
+      <Fixture {...preview} />
     </QueryClientProvider>
   )
   return screen.findByRole('spinbutton', {
     name: 'Longest log time range (days)',
   })
+}
+
+function previewControls() {
+  return {
+    toggle: screen.getByRole('switch', { name: 'Enable request preview' }),
+    limit: screen.getByRole('spinbutton', { name: 'Preview Token Limit' }),
+    save: screen.getByRole('button', { name: 'Save log settings' }),
+  }
 }
 
 beforeEach(() => {
@@ -210,5 +225,95 @@ test('the task retention saves whole days and rejects less than one day', async 
   expect(api.put).toHaveBeenCalledWith('/api/option/', {
     key: 'system_task_setting.retention_days',
     value: 7,
+  })
+})
+
+test('preview controls fall back to enabled and a 200 token limit when defaults are absent', async () => {
+  await renderSettings()
+  const { toggle, limit } = previewControls()
+
+  expect(toggle).toBeChecked()
+  expect(limit).toHaveValue(200)
+})
+
+test('the preview token limit saves the inclusive 1 and 2000 boundaries', async () => {
+  const user = userEvent.setup()
+  await renderSettings()
+  const { limit, save } = previewControls()
+
+  fireEvent.change(limit, { target: { value: '1' } })
+  await user.click(save)
+  await waitFor(() =>
+    expect(api.put).toHaveBeenCalledWith('/api/option/', {
+      key: 'RequestPreviewMaxTokens',
+      value: 1,
+    })
+  )
+
+  fireEvent.change(limit, { target: { value: '2000' } })
+  await user.click(save)
+  await waitFor(() =>
+    expect(api.put).toHaveBeenCalledWith('/api/option/', {
+      key: 'RequestPreviewMaxTokens',
+      value: 2000,
+    })
+  )
+})
+
+test.each(['0', '2001'])(
+  'a preview token limit of %s is rejected instead of saved',
+  async (value) => {
+    const user = userEvent.setup()
+    await renderSettings()
+    const { limit, save } = previewControls()
+
+    fireEvent.change(limit, { target: { value } })
+    await user.click(save)
+
+    await waitFor(() => expect(limit).toHaveAttribute('aria-invalid', 'true'))
+    expect(api.put).not.toHaveBeenCalled()
+  }
+)
+
+test('a non-numeric preview token limit is ignored and keeps the last valid value', async () => {
+  const user = userEvent.setup()
+  await renderSettings({ maxTokens: 300 })
+  const { limit, save } = previewControls()
+  expect(limit).toHaveValue(300)
+
+  fireEvent.change(limit, { target: { value: 'abc' } })
+
+  expect(limit).toHaveValue(300)
+  await user.click(save)
+  expect(api.put).not.toHaveBeenCalled()
+})
+
+test('toggling only the request preview switch saves only that key', async () => {
+  const user = userEvent.setup()
+  await renderSettings({ enabled: false, maxTokens: 300 })
+  const { toggle, save } = previewControls()
+
+  await user.click(toggle)
+  await user.click(save)
+
+  await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'RequestPreviewEnabled',
+    value: true,
+  })
+})
+
+test('changing only the preview token limit saves only that key', async () => {
+  const user = userEvent.setup()
+  await renderSettings({ enabled: true, maxTokens: 300 })
+  const { limit, save } = previewControls()
+
+  fireEvent.change(limit, { target: { value: '450' } })
+  await user.click(save)
+
+  await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+  expect(api.put).toHaveBeenCalledWith('/api/option/', {
+    key: 'RequestPreviewMaxTokens',
+    value: 450,
   })
 })
