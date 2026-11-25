@@ -530,36 +530,36 @@ git commit -m "feat: GLM 渠道用量查询（5h/周窗口）与路由"
   - `service.CountTextToken(text, model string) int`、`service.TruncateTextToTokens(text, model string, maxTokens int) string`。
   - 消费日志公开字段 `request_preview`、`request_preview_user`、`response_preview`。
 
-- [ ] **Step 1: 取设置、文档与测试，建立截断助手**
+- [x] **Step 1: 取设置、文档与测试，建立截断助手**
 
 Run: `git checkout backup-before-upstream -- setting/request_preview_setting.go docs/request-preview.md relay/common/relay_info_response_preview_test.go relaykit/dto/request_preview_test.go service/token_counter_test.go`
 新增 `service/text_truncate.go`：`CountTextToken` 委托 `tokenkit.Count`；`TruncateTextToTokens` 保留本地二分 rune 前缀算法，计数改为 `CountTextToken`。
 Run: `go test ./service/ -run TruncateTextToTokens`
 Expected: 全绿。
 
-- [ ] **Step 2: 合并请求元数据与 RelayInfo**
+- [x] **Step 2: 合并请求元数据与 RelayInfo**
 
 在 `relaykit/types/request_meta.go` 的 `TokenCountMeta` 加 `LastUserMessage`；在 `relaykit/dto` 的 Claude / OpenAI / Responses `GetTokenCountMeta` 中填充最后一条 user 消息（多个文本段以换行连接）。在 `relay/common/relay_info.go` 加三个预览字段与 `SetResponsePreview`（按 rune 截断到 1024，`common.LogConsumeEnabled=false` 时跳过）。
 Run: `(cd relaykit && GOWORK=off go test ./dto/ -run LastUserMessage)`
 Expected: 全绿。
 
-- [ ] **Step 3: 合并日志写入与旧格式兼容**
+- [x] **Step 3: 合并日志写入与旧格式兼容**
 
 在 `service/log_info_generate.go` 的 `GenerateTextOtherInfo` 中用 `other.SetPublic("request_preview", ...)` 等写入三个预览字段（空值不写）。在 `model/log.go` 的 `formatLogOtherJSON` 用户可见投影中，保留本地「把历史 `admin_info` 内旧预览字段提升到顶层再剥离」的兼容逻辑；适配 `model/log_format_test.go`。
 Run: `go test ./service/ -run 'GenerateTextOtherInfo.*Preview'` 与 `go test ./model/ -run LogFormat`
 Expected: 全绿。
 
-- [ ] **Step 4: 合并各格式响应预览采集**
+- [x] **Step 4: 合并各格式响应预览采集**
 
 在 Claude / Gemini / OpenAI / Responses 的中心响应处理路径调用 `relayInfo.SetResponsePreview(...)`，只采集文本输出（含思考内容），音频/图片/embedding 不采集。上游适配器结构变化较大，按「输出文本最终汇聚点」定位，不要在流式分片处逐片拼接。
 Run: `go test ./relay/ -run ResponsePreview`
 Expected: 全绿。
 
-- [ ] **Step 5: 合并 controller 预览块**
+- [x] **Step 5: 合并 controller 预览块**
 
 在 `controller/relay.go` 的 `GenRelayInfo` 之后、`relay.PrepareRequestBilling` 之前，加入：仅当 `setting.RequestPreviewEnabled() && common.LogConsumeEnabled` 时调用 `request.GetTokenCountMeta()`，截断前 N token 与最后一条用户消息写入 `relayInfo`。`model/option.go` 注册 `RequestPreviewEnabled=true`、`RequestPreviewMaxTokens=200`。
 
-- [ ] **Step 6: 全量后端构建与提交**
+- [x] **Step 6: 全量后端构建与提交**
 
 Run:
 ```bash
@@ -576,11 +576,11 @@ git commit -m "feat: 日志请求与输出预览（所有者可见）"
 
 ### Gate G2: 后端自研功能门禁
 
-- [ ] `go build .` 与根模块包构建退出 0。
-- [ ] `go test ./model/ ./controller/ ./service/ ./router/` 全绿；`go test ./setting/` 全绿。
-- [ ] `(cd relaykit && GOWORK=off go build ./... && GOWORK=off go test ./...)` 全绿。
-- [ ] SQLite 连续启动两次无 AutoMigrate 错误；`logs` 含 `input_tokens`/`cache_tokens`/`cache_read_tokens`，`users` 含 `department`，`quota_data` 含本地三列。
-- [ ] 记录本批新增列清单，供 P5.3 三库验证使用。
+- [x] `go build .` 与根模块包构建退出 0。
+- [x] `go test ./model/ ./controller/ ./service/ ./router/` 全绿；`go test ./setting/` 全绿。
+- [x] `(cd relaykit && GOWORK=off go build ./... && GOWORK=off go test ./...)` 全绿。
+- [x] SQLite 连续启动两次无 AutoMigrate 错误；`logs` 含 `input_tokens`/`cache_tokens`/`cache_read_tokens`，`users` 含 `department`，`quota_data` 含本地三列。
+- [x] 记录本批新增列清单，供 P5.3 三库验证使用。
 
 ---
 
