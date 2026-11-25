@@ -187,10 +187,32 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	// Request preview: when enabled and consume logs are written, keep the
 	// first N tokens of the request text and the last user message (what the
 	// user actually typed) for the log owner and admins.
-	if setting.RequestPreviewEnabled() && common.LogConsumeEnabled {
-		if meta := request.GetTokenCountMeta(); meta != nil && meta.CombineText != "" {
-			relayInfo.RequestPreview = service.TruncateTextToTokens(meta.CombineText, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
-			relayInfo.RequestPreviewUser = service.TruncateTextToTokens(meta.LastUserMessage, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
+	previewEnabled := setting.RequestPreviewEnabled() && common.LogConsumeEnabled
+	contextLimit := operation_setting.MaxPromptTokensForModel(relayInfo.OriginModelName)
+	var tokenCountMeta *types.TokenCountMeta
+	if previewEnabled || contextLimit > 0 {
+		tokenCountMeta = request.GetTokenCountMeta()
+	}
+	if previewEnabled && tokenCountMeta != nil && tokenCountMeta.CombineText != "" {
+		relayInfo.RequestPreview = service.TruncateTextToTokens(tokenCountMeta.CombineText, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
+		relayInfo.RequestPreviewUser = service.TruncateTextToTokens(tokenCountMeta.LastUserMessage, relayInfo.OriginModelName, setting.RequestPreviewMaxTokens())
+	}
+
+	// Context limit: reject an over-limit prompt before any pre-consume. The
+	// count uses CountRequestToken so the limit keeps working when the
+	// CountToken billing-estimation switch is off. A nil meta means the
+	// format has no prompt to measure (for example Realtime), so skip.
+	if contextLimit > 0 && tokenCountMeta != nil {
+		tokens, countErr := service.CountRequestToken(c, tokenCountMeta, relayInfo)
+		if countErr != nil {
+			newAPIError = types.NewError(countErr, types.ErrorCodeCountTokenFailed)
+			return
+		}
+		if tokens > contextLimit {
+			logger.LogWarn(c, fmt.Sprintf("context limit exceeded: model %s estimated prompt tokens %d > limit %d", relayInfo.OriginModelName, tokens, contextLimit))
+			recordContextLimitErrorLog(c, relayInfo, tokens, contextLimit)
+			newAPIError = contextLimitError(relayInfo.OriginModelName, tokens, contextLimit)
+			return
 		}
 	}
 
@@ -278,6 +300,60 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := common.LogText("retry: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
+}
+
+func contextLimitError(model string, tokens, limit int) *types.NewAPIError {
+	return types.NewErrorWithStatusCode(
+		fmt.Errorf("estimated prompt tokens %d exceed the context limit %d for model %s, please compact the conversation or start a new session", tokens, limit, model),
+		types.ErrorCodeContextLimitExceeded,
+		http.StatusRequestEntityTooLarge,
+		types.ErrOptionWithSkipRetry(),
+	)
+}
+
+func contextLimitErrorOther(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens, limit int) *model.LogOther {
+	other := model.NewLogOther()
+	if c.Request != nil && c.Request.URL != nil {
+		other.SetPublic("request_path", c.Request.URL.Path)
+	}
+	other.SetPublic("error_type", types.ErrorTypeNewAPIError)
+	other.SetPublic("error_code", string(types.ErrorCodeContextLimitExceeded))
+	other.SetPublic("status_code", http.StatusRequestEntityTooLarge)
+	other.SetPublic("estimated_prompt_tokens", tokens)
+	other.SetPublic("context_limit", limit)
+	other.SetPublic("relay_format", string(relayInfo.RelayFormat))
+	// This rejection happens before channel selection, so use_channel is
+	// usually empty; it stays admin-only when a retry populated it.
+	if usedChannel := c.GetStringSlice("use_channel"); len(usedChannel) > 0 {
+		other.SetAdmin("use_channel", usedChannel)
+	}
+	return other
+}
+
+// recordContextLimitErrorLog records the context-limit rejection. That branch
+// returns before channel selection, so it never reaches processChannelError and
+// must write its own error log for users and admins to see it.
+func recordContextLimitErrorLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens, limit int) {
+	if !constant.ErrorLogEnabled {
+		return
+	}
+	startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	if startTime.IsZero() {
+		startTime = time.Now()
+	}
+	model.RecordErrorLog(
+		c,
+		c.GetInt("id"),
+		c.GetInt("channel_id"),
+		relayInfo.OriginModelName,
+		c.GetString("token_name"),
+		fmt.Sprintf("context limit exceeded: estimated prompt tokens %d > limit %d", tokens, limit),
+		c.GetInt("token_id"),
+		int(time.Since(startTime).Seconds()),
+		common.GetContextKeyBool(c, constant.ContextKeyIsStream),
+		c.GetString("group"),
+		contextLimitErrorOther(c, relayInfo, tokens, limit),
+	)
 }
 
 func writeRelayStreamError(c *gin.Context, format types.RelayFormat, apiError *types.NewAPIError) {
