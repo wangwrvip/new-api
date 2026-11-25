@@ -27,9 +27,8 @@ interface ChangeIndicatorProps {
 
 export function ChangeIndicator(props: ChangeIndicatorProps) {
   const { t } = useTranslation()
-  const formatted = formatPercentChange(
-    percentChange(props.current, props.previous)
-  )
+  const change = percentChange(props.current, props.previous)
+  const formatted = formatPercentChange(change)
   if (formatted == null) {
     return (
       <span title={t('No usage in previous period')} aria-label={t('Change')}>
@@ -37,10 +36,16 @@ export function ChangeIndicator(props: ChangeIndicatorProps) {
       </span>
     )
   }
-  const direction = formatted.startsWith('+') ? '↑' : '↓'
+  // A zero change is neutral: no arrow should imply growth or decline.
+  let direction = ''
+  if (change != null && change > 0) {
+    direction = '↑'
+  } else if (change != null && change < 0) {
+    direction = '↓'
+  }
   return (
     <span aria-label={`${t('Change')} ${formatted}`}>
-      {direction} {formatted}
+      {direction ? `${direction} ${formatted}` : formatted}
     </span>
   )
 }
