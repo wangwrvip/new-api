@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
+import type { TOptions } from 'i18next'
 import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -43,6 +44,7 @@ import {
   requestRuleGroupsFromTrace,
   type RequestRuleGroup,
 } from '@/features/pricing/lib/billing-expr'
+import { formatBillingCondition } from '@/features/pricing/lib/billing-expression/condition-display'
 import {
   formatTaskUsageUnitPrice,
   getTaskUsagePriceUnitLabelKey,
@@ -89,6 +91,8 @@ interface DetailSegment {
   danger?: boolean
 }
 
+type Translate = (key: string, options?: TOptions) => string
+
 function formatRatioCompact(ratio: number | undefined): string {
   if (ratio == null || !Number.isFinite(ratio)) return '-'
   return ratio % 1 === 0
@@ -97,15 +101,27 @@ function formatRatioCompact(ratio: number | undefined): string {
 }
 
 // Compact label for a traced request-rule group used in the details column.
-// Time-range conditions (e.g. peak hours) get a short "14:00–18:00" form;
-// anything unparseable falls back to the raw condition text.
-function formatRequestRuleLabel(group: RequestRuleGroup): string {
+// Reuse the billing-condition formatter so time rules keep valid values and
+// carry their timezone; its fallback only covers conditions it cannot parse.
+function formatRequestRuleLabel(
+  group: RequestRuleGroup,
+  t: Translate,
+  language: string
+): string {
+  const formatted = group.conditionText
+    ? formatBillingCondition(group.conditionText, t, language)
+    : null
+  if (formatted) return formatted
   const cond = group.conditions[0]
   if (cond && cond.source === 'time' && cond.mode === MATCH_RANGE) {
-    if (cond.timeFunc === 'hour' || cond.timeFunc === 'minute') {
-      return `${cond.rangeStart}:00–${cond.rangeEnd}:00`
+    const zone = ` (${cond.timezone || 'UTC'})`
+    if (cond.timeFunc === 'hour') {
+      return `${cond.rangeStart}:00–${cond.rangeEnd}:00${zone}`
     }
-    return `${cond.timeFunc} ${cond.rangeStart}–${cond.rangeEnd}`
+    if (cond.timeFunc === 'minute') {
+      return `${t('Minute')} ${cond.rangeStart}–${cond.rangeEnd}${zone}`
+    }
+    return `${cond.timeFunc} ${cond.rangeStart}–${cond.rangeEnd}${zone}`
   }
   return group.conditionText || ''
 }
@@ -128,10 +144,10 @@ function getGroupRatio(other: LogOtherData | null): number | null {
   return null
 }
 
-function buildDetailSegments(
+export function buildDetailSegments(
   log: UsageLog,
   other: LogOtherData | null,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: Translate,
   isAdmin: boolean,
   language: string,
   usageSchema?: BillingUsageSchema
@@ -151,7 +167,7 @@ function buildDetailSegments(
 function buildTypeDetailSegments(
   log: UsageLog,
   other: LogOtherData | null,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: Translate,
   language: string,
   usageSchema?: BillingUsageSchema
 ): DetailSegment[] {
@@ -173,7 +189,7 @@ function buildTypeDetailSegments(
     ]
     if (other.estimated_prompt_tokens != null && other.context_limit != null) {
       segments.push({
-        text: `${other.estimated_prompt_tokens} / ${other.context_limit} tokens`,
+        text: `${other.estimated_prompt_tokens} / ${other.context_limit} ${t('tokens')}`,
         muted: true,
       })
     }
@@ -312,10 +328,12 @@ function buildTypeDetailSegments(
             priceOpts
           )}`,
         })
-        for (const rule of requestRuleGroupsFromTrace(other.request_rules || [])) {
+        for (const rule of requestRuleGroupsFromTrace(
+          other.request_rules || []
+        )) {
           if (rule.matched !== true || Number(rule.multiplier) === 1) continue
           segments.push({
-            text: `${formatRequestRuleLabel(rule)} ×${rule.multiplier}`,
+            text: `${formatRequestRuleLabel(rule, t, language)} ×${rule.multiplier}`,
             muted: true,
           })
         }
