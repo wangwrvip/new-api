@@ -365,12 +365,15 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	// 归一化 token 维度与统一总量：未传维度时保持旧口径（prompt+completion）。
 	// 上游异常值（如 cached_tokens > prompt_tokens）可能让扣减后的维度为负，
 	// 这里一次性钳制，保证 TokenUsed 恒等于 输入+缓存+输出，并与 quota_data 一致。
+	// prompt/completion 兼容字段复用同一组钳制值：负 token 数在任何语义下都
+	// 无意义，原样落库会让 logs 与 quota_data 对不上。
+	promptTokens := max(params.PromptTokens, 0)
+	completionTokens := max(params.CompletionTokens, 0)
 	inputTokens := max(params.InputTokens, 0)
 	cacheTokens := max(params.CacheTokens, 0)
 	if params.InputTokens == 0 && params.CacheTokens == 0 {
-		inputTokens = max(params.PromptTokens, 0)
+		inputTokens = promptTokens
 	}
-	completionTokens := max(params.CompletionTokens, 0)
 	other := params.Other
 	// 缓存读是缓存总量（读+写）中的读分量。logs 行与 quota_data 必须同源：
 	// 优先取上游 other.cache_tokens，缺失时回退调用方传入的归一化读分量，
@@ -394,14 +397,15 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			needRecordIp = true
 		}
 	}
+	// prompt/completion 保留上游语义供既有展示兼容，但取用钳制后的值。
 	log := &Log{
 		UserId:           userId,
 		Username:         username,
 		CreatedAt:        createdAt,
 		Type:             LogTypeConsume,
 		Content:          content,
-		PromptTokens:     params.PromptTokens,
-		CompletionTokens: params.CompletionTokens,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
 		InputTokens:      inputTokens,
 		CacheTokens:      cacheTokens,
 		CacheReadTokens:  cacheReadTokens,

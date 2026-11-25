@@ -136,15 +136,69 @@ func TestClickHouseLogCreateTableSQLCoversAllPersistedColumns(t *testing.T) {
 	}
 }
 
-func TestClickHouseLogAddColumnsSQLIsIdempotentAndCoversNewColumns(t *testing.T) {
+// clickHouseLogUpgradeBaselineColumns 是引入 ADD COLUMN 升级路径之前
+// ClickHouse logs 表已有的列。此后新增的持久化列必须同时出现在
+// clickHouseLogAddColumnsSQL 中：CREATE TABLE IF NOT EXISTS 不会修改老表，
+// 缺少 ADD COLUMN 会让老库升级后在写日志时直接失败。
+var clickHouseLogUpgradeBaselineColumns = map[string]bool{
+	"id":                  true,
+	"user_id":             true,
+	"created_at":          true,
+	"type":                true,
+	"content":             true,
+	"username":            true,
+	"token_name":          true,
+	"model_name":          true,
+	"quota":               true,
+	"prompt_tokens":       true,
+	"completion_tokens":   true,
+	"use_time":            true,
+	"is_stream":           true,
+	"channel_id":          true,
+	"token_id":            true,
+	"group":               true,
+	"ip":                  true,
+	"request_id":          true,
+	"upstream_request_id": true,
+	"other":               true,
+}
+
+// 升级语句必须覆盖 Log 的每个非基线持久化列，且语句里的列名必须对应真实
+// 持久化字段；只改建表 SQL、忘了加 ADD COLUMN 时该用例会失败。
+func TestClickHouseLogAddColumnsSQLCoversEveryPersistedColumn(t *testing.T) {
 	statements := clickHouseLogAddColumnsSQL()
-	require.Len(t, statements, 3)
+	const prefix = "ALTER TABLE logs ADD COLUMN IF NOT EXISTS "
+	upgraded := make(map[string]bool, len(statements))
+	for _, statement := range statements {
+		assert.True(t, strings.HasPrefix(statement, "ALTER TABLE logs "), statement)
+		require.True(t, strings.HasPrefix(statement, prefix), statement)
+		column, _, ok := strings.Cut(strings.TrimPrefix(statement, prefix), " ")
+		require.True(t, ok && column != "", statement)
+		upgraded[column] = true
+	}
+
+	naming := schema.NamingStrategy{}
+	logType := reflect.TypeFor[Log]()
+	persisted := make(map[string]bool, logType.NumField())
+	for i := range logType.NumField() {
+		field := logType.Field(i)
+		if strings.Contains(field.Tag.Get("gorm"), "->") {
+			continue
+		}
+		column := naming.ColumnName("", field.Name)
+		persisted[column] = true
+		if clickHouseLogUpgradeBaselineColumns[column] {
+			continue
+		}
+		assert.Truef(t, upgraded[column], "Log.%s column %q needs an ADD COLUMN migration for existing ClickHouse logs tables", field.Name, column)
+	}
+	for column := range upgraded {
+		assert.Truef(t, persisted[column], "ADD COLUMN %q does not match a persisted Log column", column)
+	}
+
 	joined := strings.Join(statements, "\n")
 	for _, column := range []string{"input_tokens", "cache_tokens", "cache_read_tokens"} {
 		assert.Contains(t, joined, "ADD COLUMN IF NOT EXISTS "+column+" Int32 DEFAULT 0")
-	}
-	for _, statement := range statements {
-		assert.True(t, strings.HasPrefix(statement, "ALTER TABLE logs "), statement)
 	}
 }
 

@@ -190,6 +190,60 @@ func TestRecordConsumeLogClampsNegativeTokenDimensions(t *testing.T) {
 	assert.GreaterOrEqual(t, got.CacheTokens, int(got.CacheReadTokens))
 }
 
+// logs 的 prompt/completion 兼容字段同样不能写入负值：上游异常返回负 token
+// 时，logs 必须与钳制后的归一化列、quota_data 输出保持同一口径。
+func TestRecordConsumeLogClampsNegativeCompatibilityTokenFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	truncateTables(t)
+	common.DataExportEnabled = true
+	t.Cleanup(func() { common.DataExportEnabled = false })
+	resetQuotaDataCache(t)
+	ctx := newConsumeLogTestContext()
+
+	// 仅输出为负：prompt 保持原值，completion 钳到 0。
+	RecordConsumeLog(ctx, 1, RecordConsumeLogParams{
+		ChannelId:        1,
+		PromptTokens:     100,
+		CompletionTokens: -10,
+		ModelName:        "claude-test",
+		Quota:            1,
+		Other:            NewLogOther(),
+	})
+	// 仅输入为负：prompt 钳到 0，completion 保持原值。
+	RecordConsumeLog(ctx, 2, RecordConsumeLogParams{
+		ChannelId:        1,
+		PromptTokens:     -100,
+		CompletionTokens: 5,
+		ModelName:        "claude-test",
+		Quota:            1,
+		Other:            NewLogOther(),
+	})
+
+	var logs []Log
+	require.NoError(t, DB.Order("id").Find(&logs).Error)
+	require.Len(t, logs, 2)
+	assert.Equal(t, 100, logs[0].PromptTokens)
+	assert.Equal(t, 0, logs[0].CompletionTokens)
+	assert.Equal(t, 0, logs[1].PromptTokens)
+	assert.Equal(t, 5, logs[1].CompletionTokens)
+
+	byUser := make(map[int]QuotaData)
+	CacheQuotaDataLock.Lock()
+	require.Len(t, CacheQuotaData, 2)
+	for _, qd := range CacheQuotaData {
+		byUser[qd.UserID] = *qd
+	}
+	CacheQuotaDataLock.Unlock()
+
+	// quota_data 的输入/输出与 logs 钳制后的值一致，且 TokenUsed 恒等于三者之和。
+	assert.Equal(t, 100, byUser[1].InputTokens)
+	assert.Equal(t, 0, byUser[1].OutputTokens)
+	assert.Equal(t, 100, byUser[1].TokenUsed)
+	assert.Equal(t, 0, byUser[2].InputTokens)
+	assert.Equal(t, 5, byUser[2].OutputTokens)
+	assert.Equal(t, 5, byUser[2].TokenUsed)
+}
+
 // logs 与 quota_data 的缓存维度必须同源：
 //   - 上游 cache_tokens / cache_write_tokens 与本地归一化三列同时存在时保持一致；
 //   - 渠道测试这类只写 other.cache_tokens、不传维度参数的调用不能产生
