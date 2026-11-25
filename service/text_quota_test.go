@@ -1870,6 +1870,126 @@ func TestCalculateTextQuotaSummaryInputTokensPerUsageSemantic(t *testing.T) {
 	}
 }
 
+// 三种上游格式的计费维度守恒：非缓存输入 + 缓存（读+写） + 输出 = 统一总量。
+// Claude 的统一总量必须取 canonical usage 的 InputTokens+OutputTokens（其中
+// InputTokens 已含缓存），不能用上游 prompt_tokens+completion_tokens——后者在
+// Anthropic 语义下不含缓存，比统一总量少一个缓存分量。
+func TestTokenDimensionsConservationAcrossProviderFixtures(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	cases := []struct {
+		name              string
+		format            types.RelayFormat
+		model             string
+		billingUsage      *dto.BillingUsage
+		wantInput         int
+		wantCache         int
+		wantCacheCreation int
+		wantCompletion    int
+		wantUnifiedTotal  int
+		wantUpstreamTotal int
+	}{
+		{
+			// Claude messages.usage: input 70 + cache_read 30 + cache_creation 20 + output 7。
+			// canonical InputTokens=120（含缓存）、OutputTokens=7，统一总量 127；
+			// 上游 prompt_tokens+completion_tokens 只有 77。
+			name:   "claude messages",
+			format: types.RelayFormatClaude,
+			model:  "claude-3-7-sonnet",
+			billingUsage: dto.NewClaudeMessagesBillingUsage(&dto.ClaudeUsage{
+				InputTokens:              70,
+				CacheReadInputTokens:     30,
+				CacheCreationInputTokens: 20,
+				OutputTokens:             7,
+				CacheCreation: &dto.ClaudeCacheCreationUsage{
+					Ephemeral5mInputTokens: 12,
+					Ephemeral1hInputTokens: 8,
+				},
+			}),
+			wantInput:         70,
+			wantCache:         30,
+			wantCacheCreation: 20,
+			wantCompletion:    7,
+			wantUnifiedTotal:  127,
+			wantUpstreamTotal: 77,
+		},
+		{
+			// Gemini usageMetadata: prompt 100 + tool prompt 5 + candidates 20 +
+			// thoughts 3 = total 128，其中 cachedContent 7 已包含在 prompt 内。
+			name:   "gemini generate content",
+			format: types.RelayFormatOpenAI,
+			model:  "gemini-2.5-flash",
+			billingUsage: dto.NewGeminiChatBillingUsage(&dto.GeminiUsageMetadata{
+				PromptTokenCount:        100,
+				ToolUsePromptTokenCount: 5,
+				CandidatesTokenCount:    20,
+				ThoughtsTokenCount:      3,
+				TotalTokenCount:         128,
+				CachedContentTokenCount: 7,
+			}),
+			wantInput:         98,
+			wantCache:         7,
+			wantCacheCreation: 0,
+			wantCompletion:    23,
+			wantUnifiedTotal:  128,
+			wantUpstreamTotal: 128,
+		},
+		{
+			// OpenAI responses.usage: input 100（含 cached 80 与 cache_write 10）
+			// + output 10 = total 110。
+			name:   "openai responses",
+			format: types.RelayFormatOpenAIResponses,
+			model:  "gpt-5.1",
+			billingUsage: dto.NewOpenAIResponsesBillingUsage(&dto.Usage{
+				InputTokens:  100,
+				OutputTokens: 10,
+				TotalTokens:  110,
+				InputTokensDetails: &dto.InputTokenDetails{
+					CachedTokens:     80,
+					CacheWriteTokens: 10,
+				},
+			}),
+			wantInput:         10,
+			wantCache:         80,
+			wantCacheCreation: 10,
+			wantCompletion:    10,
+			wantUnifiedTotal:  110,
+			wantUpstreamTotal: 110,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			relayInfo := &relaycommon.RelayInfo{
+				RelayFormat:     tc.format,
+				OriginModelName: tc.model,
+				PriceData: hosttypes.PriceData{
+					ModelRatio:           1,
+					CompletionRatio:      1,
+					CacheRatio:           0.1,
+					CacheCreationRatio:   1.25,
+					CacheCreation5mRatio: 1.25,
+					CacheCreation1hRatio: 2,
+					GroupRatioInfo:       hosttypes.GroupRatioInfo{GroupRatio: 1},
+				},
+				StartTime: time.Now(),
+			}
+			usage := effectiveBillingUsage(&dto.Usage{BillingUsage: tc.billingUsage})
+			summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+			require.Equal(t, tc.wantInput, summary.InputTokens)
+			require.Equal(t, tc.wantCache, summary.CacheTokens)
+			require.Equal(t, tc.wantCacheCreation, summary.CacheCreationTokens)
+			require.Equal(t, tc.wantCompletion, summary.CompletionTokens)
+			require.Equal(t, tc.wantCache+tc.wantCacheCreation, summary.CacheTokensTotal)
+			require.Equal(t, tc.wantUnifiedTotal,
+				summary.InputTokens+summary.CacheTokensTotal+summary.CompletionTokens)
+			require.Equal(t, tc.wantUpstreamTotal, summary.TotalTokens)
+		})
+	}
+}
+
 // legacy Claude-derived（无语义标记、仅 5m/1h 拆分字段）视同 anthropic：prompt 不含缓存。
 func TestCalculateTextQuotaSummaryInputTokensLegacyClaudeDerived(t *testing.T) {
 	gin.SetMode(gin.TestMode)
