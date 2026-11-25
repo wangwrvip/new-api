@@ -814,33 +814,33 @@ git commit -m "chore(web): 引入 pptxgenjs 并保留 node: 模块替换配置"
 - Consumes: 上游日志行结构（`other` 已按角色投影，内容在 `content_parts`）；P2.5 的 `request_preview`/`response_preview`；P3.3 的 `estimated_prompt_tokens`。
 - Produces: 错误日志列、估算/实际行、请求/输出预览区块、阶梯按次计费显示。
 
-- [ ] **Step 1: 查看本地差异**
+- [x] **Step 1: 查看本地差异**
 
 Run: `git diff 2b6f1dfe backup-before-upstream -- web/src/features/usage-logs web/src/features/pricing/lib/billing-expr.ts`
 Expected: 明确本地新增的列、详情行、预览区块、tiered summary 逻辑。
 
-- [ ] **Step 2: 以上游重置共享文件**
+- [x] **Step 2: 以上游重置共享文件**
 
 Run: `git checkout origin/main -- web/src/features/usage-logs/components/columns/common-logs-columns.tsx web/src/features/usage-logs/components/dialogs/details-dialog.tsx web/src/features/usage-logs/lib/format.ts web/src/features/usage-logs/types.ts web/src/features/pricing/lib/billing-expr.ts`
 
-- [ ] **Step 3: 手工加回本地能力**
+- [x] **Step 3: 手工加回本地能力**
 
 - 列：错误日志列（`type=5`）与「估算 / 实际」列；适配上游列定义 API。
 - 详情：`estimated_prompt_tokens` 与真实 `prompt_tokens` 对比行；请求预览（`request_preview` + `request_preview_user`）与输出预览（`response_preview`）区块；复制按钮沿用上游样式。
 - 阶梯计费：纯常量按次计费显示「每次调用 · $x」；复用本地 `billing-expr.ts` 的差异，但适配上游函数签名。
 - 类型：把本地字段加入上游 `LogOther` 投影类型，不覆盖上游 `content_parts` 等字段。
 
-- [ ] **Step 4: 加回本地测试**
+- [x] **Step 4: 加回本地测试**
 
 Run: `git checkout backup-before-upstream -- web/src/features/usage-logs/components/__tests__/response-preview.test.tsx web/src/features/usage-logs/lib/__tests__/tiered-summary.test.ts`
 按上游组件结构适配导入与查询方式。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run: `cd web && bun run vitest run src/features/usage-logs`
 Expected: 全绿。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add web/src/features/usage-logs web/src/features/pricing/lib/billing-expr.ts
