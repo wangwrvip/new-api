@@ -28,6 +28,9 @@ func TestModelFamily(t *testing.T) {
 		{"claude-fable-5-1", FamilyClaude47},
 		{"Claude-Opus-5-5", FamilyClaude47},
 		{"claude-mythos-preview", FamilyClaude47},
+		{"glm-5.3", FamilyGLM},
+		{"zhipu/glm-4.5", FamilyGLM},
+		{"chatglm4", FamilyGLM},
 		{"gemini-3.7-flash", FamilyGemini},
 		{"gpt-5.6-sol", FamilyOpenAI},
 		{"gpt-6-astra", FamilyOpenAI},
@@ -61,6 +64,16 @@ func TestCountUsesTiktokenForOpenAIModels(t *testing.T) {
 	assert.Equal(t, cl100k, Count("gpt-4", text))
 	assert.Equal(t, cl100k, Count("gpt-3.5-turbo", text))
 	assert.Equal(t, Estimate("claude-sonnet-5", text), Count("claude-sonnet-5", text))
+}
+
+func TestCountUsesCl100kForGLMModels(t *testing.T) {
+	const text = "统计 token 与 GLM 模型；Large language models bill by token. 🙂"
+	want, _ := codec.NewCl100kBase().Count(text)
+
+	// Short text stays in one run, so Count matches the cl100k codec exactly.
+	assert.Equal(t, want, Count("glm-5.3", text))
+	assert.Equal(t, want, Count("zhipu/glm-4.5", text))
+	assert.Equal(t, want, Count("chatglm4", text))
 }
 
 // Long runs without separators are cut before encoding so BPE stays linear;

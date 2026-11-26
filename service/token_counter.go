@@ -106,7 +106,11 @@ func CountRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *relayco
 		tkm += tokenkit.Count(model, meta.CombineText)
 	}
 
-	if info.RelayFormat == types.RelayFormatOpenAI {
+	// GLM 的 cl100k_base 与上游实际 usage 存在固定偏差，对 OpenAI 与
+	// Claude（/v1/messages）等所有 relay format 都按实测公式补齐。
+	if tokenkit.ModelFamily(model) == tokenkit.FamilyGLM {
+		tkm += 100 + meta.ToolsCount*31 + meta.MessagesCount*3 + 3
+	} else if info.RelayFormat == types.RelayFormatOpenAI {
 		tkm += meta.ToolsCount * 8
 		tkm += meta.MessagesCount * 3 // 每条消息的格式化token数量
 		tkm += meta.NameCount * 3

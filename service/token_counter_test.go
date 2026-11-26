@@ -2,9 +2,17 @@ package service
 
 import (
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/tokenkit"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,5 +88,47 @@ func TestTruncateTextToTokens(t *testing.T) {
 		got := TruncateTextToTokens(text, model, math.MaxInt)
 		require.True(t, strings.HasPrefix(text, got), "result must be a prefix of input")
 		assert.LessOrEqual(t, len([]rune(got)), previewHardCapRunes)
+	})
+}
+
+// TestCountRequestTokenGLMOverhead 验证 GLM 的固定开销公式，并确保非 GLM 行为不变。
+func TestCountRequestTokenGLMOverhead(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const text = "统计 token 与 GLM 模型；Large language models bill by token. 🙂"
+
+	count := func(t *testing.T, model string, format types.RelayFormat) int {
+		t.Helper()
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+		common.SetContextKey(c, constant.ContextKeyOriginalModel, model)
+		meta := &types.TokenCountMeta{
+			TokenType:     types.TokenTypeTokenizer,
+			CombineText:   text,
+			ToolsCount:    2,
+			MessagesCount: 3,
+		}
+		info := &relaycommon.RelayInfo{RelayFormat: format}
+		got, err := CountRequestToken(c, meta, info)
+		require.NoError(t, err)
+		return got
+	}
+
+	t.Run("OpenAI format adds the calibrated GLM overhead", func(t *testing.T) {
+		// gpt-4 and glm both count text with cl100k, so the difference is only
+		// the fixed overhead: +100 and 31 vs 8 per tool.
+		glm := count(t, "glm-5.3", types.RelayFormatOpenAI)
+		openai := count(t, "gpt-4", types.RelayFormatOpenAI)
+		assert.Equal(t, 100+2*(31-8), glm-openai)
+	})
+
+	t.Run("Claude format also applies the GLM overhead", func(t *testing.T) {
+		glm := count(t, "glm-5.3", types.RelayFormatClaude)
+		want := tokenkit.Count("glm-5.3", text) + 100 + 31*2 + 3*3 + 3
+		assert.Equal(t, want, glm)
+
+		// Non-GLM Claude requests gain no overhead.
+		claude := count(t, "claude-sonnet-4-20250514", types.RelayFormatClaude)
+		assert.Equal(t, tokenkit.Count("claude-sonnet-4-20250514", text), claude)
 	})
 }

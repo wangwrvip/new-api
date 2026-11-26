@@ -1,8 +1,9 @@
 // Package tokenkit estimates LLM token counts for text and images without
 // calling an upstream API.
 //
-// Text is counted exactly with tiktoken for OpenAI GPT and o-series models and
-// estimated with per-tokenizer weights for Claude, Gemini, and other models.
+// Text is counted exactly with tiktoken for OpenAI GPT, o-series, and Zhipu GLM
+// models and estimated with per-tokenizer weights for Claude, Gemini, and other
+// models.
 // Image costs follow each provider's published sizing rules. The weights were
 // calibrated against upstream usage on real agent traffic (Claude Code and
 // Codex sessions).
@@ -22,6 +23,7 @@ const (
 	FamilyOpenAI   Family = "openai"    // GPT and o-series models
 	FamilyClaude   Family = "claude"    // Claude models before Claude Opus 4.7
 	FamilyClaude47 Family = "claude4.7" // Claude Opus 4.7 and later, including Claude 5, Fable, and Mythos
+	FamilyGLM      Family = "glm"       // Zhipu GLM models, counted with cl100k_base
 	FamilyGemini   Family = "gemini"    // Gemini models
 	FamilyUnknown  Family = "unknown"   // everything else
 )
@@ -31,6 +33,8 @@ const (
 func ModelFamily(model string) Family {
 	model = strings.ToLower(model)
 	switch {
+	case strings.Contains(model, "glm"):
+		return FamilyGLM
 	case strings.Contains(model, "gemini"):
 		return FamilyGemini
 	case strings.Contains(model, "claude"):

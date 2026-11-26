@@ -22,18 +22,20 @@ var (
 // runs, and a cut changes the count only inside the run (under 0.5% for CJK).
 const maxRunBytes = 1024
 
-// Count returns the token count of text for model. GPT and o-series models
-// are counted with their tiktoken encoding; other models use Estimate.
+// Count returns the token count of text for model. GPT and o-series models are
+// counted with their tiktoken encoding and GLM with cl100k_base; other
+// models use Estimate.
 func Count(model, text string) int {
 	if text == "" {
 		return 0
 	}
 	model = strings.ToLower(model)
-	if ModelFamily(model) != FamilyOpenAI {
+	family := ModelFamily(model)
+	if family != FamilyOpenAI && family != FamilyGLM {
 		return Estimate(model, text)
 	}
 	encoder := o200kBase()
-	if usesCl100k(model) {
+	if family == FamilyGLM || usesCl100k(model) {
 		encoder = cl100kBase()
 	}
 
