@@ -163,4 +163,24 @@ P5.4 已在 `service/text_quota_test.go` 增加 Claude / Gemini / OpenAI 固定 
 
 协议从 OpenAI 换成 Anthropic 后偏差几乎不变，说明问题不在请求格式/工具序列化，而在 GLM 文本的 tokenizer 权重。
 
+## 8. S2 修正后复测（P5.5b）
+
+按用户选择走 cl100k 近似路线：`tokenkit` 新增 `FamilyGLM`，GLM 文本用现有 cl100k codec；`CountRequestToken` 对 GLM 使用固定开销 `100 + 31*ToolsCount + 3*MessagesCount + 3`（所有 relay format）。非 GLM 行为不变。
+
+镜像 `new-api:migrate-2026-11b`（含 P5.5b `a05c7165e` 与 P5.5c `27830a767`+`ab50b1045`）部署后复测：
+
+| 用例 | 上游实际 prompt | 估算 | 偏差 |
+| --- | ---: | ---: | ---: |
+| 100K（660KB） | 107306 | 107311 | **+0.005%** |
+| 300K（1.84MB） | 297889 | 297894 | **+0.002%** |
+| 500K（3.06MB） | 494934 | 494938 | **+0.001%** |
+
+结论：**S2 PASS**（100K–500K token 三档均 ≤0.01%）。小样本 P4 中文约 +12% 仍为已知边缘，不在本次 100K–500K 验收范围内。
+
+## 9. 日志预览修正验证（P5.5c）
+
+- `request_preview_user`：发送一条最后 user 消息为 `<system-reminder>…</system-reminder>\nActual question: …` 的请求，日志预览为 `Actual question: reply with the single word OK`，system-reminder 已被过滤；`CombineText` 未清洗，token 计数不受影响。
+- `response_preview`：同一请求返回 `OK`，日志预览为 `OK`；reasoning/thinking 只在没有可见正文时回退。
+
+
 
