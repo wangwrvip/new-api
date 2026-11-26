@@ -51,6 +51,9 @@ function makeLog(other: LogOtherData): UsageLog {
     quota: 5000,
     prompt_tokens: 0,
     completion_tokens: 0,
+    input_tokens: 0,
+    cache_tokens: 0,
+    cache_read_tokens: 0,
     use_time: 0,
     is_stream: false,
     channel: 1,
@@ -269,7 +272,7 @@ describe('usage facts billing details', () => {
     )
     expect(
       screen.getByText('Input Tokens').nextElementSibling
-    ).toHaveTextContent('1,000')
+    ).toHaveTextContent('700')
     expect(
       screen
         .getAllByText('Cache Read')

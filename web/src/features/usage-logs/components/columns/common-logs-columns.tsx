@@ -64,6 +64,7 @@ import {
   formatModelName,
   decodeBillingExprB64,
   getTieredBillingSummary,
+  getTokenBreakdown,
   hasAnyCacheTokens,
   parseLogOther,
   isViolationFeeLog,
@@ -807,13 +808,14 @@ export function useCommonLogsColumns(
 
           const other = parseLogOther(log.other)
 
-          const promptTokens = log.prompt_tokens || 0
-          const completionTokens = log.completion_tokens || 0
-          if (promptTokens === 0 && completionTokens === 0) {
+          const { inputTokens, outputTokens, cacheRead } = getTokenBreakdown(
+            log,
+            other
+          )
+          if (inputTokens + cacheRead + outputTokens === 0) {
             return <span className='text-muted-foreground text-xs'>-</span>
           }
 
-          const cacheReadTokens = other?.cache_tokens || 0
           const cacheWrite5m = other?.cache_creation_tokens_5m || 0
           const cacheWrite1h = other?.cache_creation_tokens_1h || 0
           const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
@@ -824,14 +826,13 @@ export function useCommonLogsColumns(
           return (
             <div className='flex flex-col gap-0.5'>
               <span className='font-mono text-xs font-medium tabular-nums'>
-                {promptTokens.toLocaleString()} /{' '}
-                {completionTokens.toLocaleString()}
+                {inputTokens.toLocaleString()} / {outputTokens.toLocaleString()}
               </span>
-              {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
+              {(cacheRead > 0 || cacheWriteTokens > 0) && (
                 <div className='flex items-center gap-1 text-[11px]'>
-                  {cacheReadTokens > 0 && (
+                  {cacheRead > 0 && (
                     <span className='text-muted-foreground/60'>
-                      {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                      {t('Cache')}↓ {cacheRead.toLocaleString()}
                     </span>
                   )}
                   {cacheWriteTokens > 0 && (

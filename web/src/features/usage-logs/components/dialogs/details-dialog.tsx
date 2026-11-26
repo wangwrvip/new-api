@@ -92,6 +92,7 @@ import {
   getFirstResponseTimeColor,
   getResponseTimeColor,
   getReasoningEffortVariant,
+  getTokenBreakdown,
   logTokenName,
   renderAuditContent,
   renderLogContent,
@@ -408,9 +409,7 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   const { t, i18n } = useTranslation()
   const { log, other } = props
 
-  const promptTokens = log.prompt_tokens || 0
-  const completionTokens = log.completion_tokens || 0
-  const cacheRead = other.cache_tokens || 0
+  const { inputTokens, outputTokens, cacheRead } = getTokenBreakdown(log, other)
   const cacheWrite = other.cache_creation_tokens || 0
   const cacheWrite5m = other.cache_creation_tokens_5m || 0
   const cacheWrite1h = other.cache_creation_tokens_1h || 0
@@ -418,7 +417,7 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   // cache_creation_tokens counts OpenAI 30-minute and 12-hour writes together.
   const cacheWrite30m =
     cacheWrite12h > 0 ? Math.max(cacheWrite - cacheWrite12h, 0) : 0
-  const hasTokens = promptTokens > 0 || completionTokens > 0
+  const hasTokens = inputTokens + cacheRead + outputTokens > 0
 
   if (!hasTokens) return null
 
@@ -433,10 +432,10 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   const rows: Array<{ label: string; value: string }> = []
 
-  rows.push({ label: t('Input Tokens'), value: promptTokens.toLocaleString() })
+  rows.push({ label: t('Input Tokens'), value: inputTokens.toLocaleString() })
   rows.push({
     label: t('Output Tokens'),
-    value: completionTokens.toLocaleString(),
+    value: outputTokens.toLocaleString(),
   })
 
   if (cacheRead > 0) {
@@ -500,11 +499,11 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
     })
   }
 
-  // Local estimate vs upstream actual: Anthropic's prompt count excludes
-  // cache hits, so the full context adds them; OpenAI already includes them.
+  // Local estimate vs upstream actual: both protocols now report input
+  // without cache hits, so the actual context is input + cache read.
   const estimatedPrompt = other.estimated_prompt_tokens
   if (estimatedPrompt != null) {
-    const actualPrompt = promptTokens + (other.claude ? cacheRead : 0)
+    const actualPrompt = inputTokens + cacheRead
     if (actualPrompt > 0) {
       const delta = (100 * (estimatedPrompt - actualPrompt)) / actualPrompt
       const signed = `${delta > 0 ? '+' : ''}${formatNumber(delta, locale)}%`

@@ -350,6 +350,36 @@ export function hasAnyCacheTokens(
   )
 }
 
+/**
+ * Normalized token breakdown shared by the log detail dialog and the list
+ * Tokens column. Input excludes cache hits so OpenAI and Anthropic logs read
+ * the same; cache reads are reported separately and the total context is
+ * inputTokens + cacheRead.
+ */
+export function getTokenBreakdown(
+  log: UsageLog,
+  other: LogOtherData | null | undefined
+): { inputTokens: number; outputTokens: number; cacheRead: number } {
+  const promptTokens = log.prompt_tokens || 0
+  const cacheRead = log.cache_read_tokens || other?.cache_tokens || 0
+  // Prefer the normalized field; older logs fall back to the channel's raw
+  // prompt semantics: Anthropic's prompt already excludes cache hits, while
+  // OpenAI's includes them.
+  let inputTokens: number
+  if (log.input_tokens > 0) {
+    inputTokens = log.input_tokens
+  } else if (other?.claude) {
+    inputTokens = promptTokens
+  } else {
+    inputTokens = Math.max(promptTokens - cacheRead, 0)
+  }
+  return {
+    inputTokens,
+    outputTokens: log.completion_tokens || 0,
+    cacheRead,
+  }
+}
+
 export function getTieredBillingSummary(
   other: LogOtherData | null,
   modelName?: string
