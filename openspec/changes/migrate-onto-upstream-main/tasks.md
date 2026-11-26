@@ -34,10 +34,10 @@
 
 ## 6. 全量验证与切换
 
-- [ ] 6.1 三模块构建与 `make test` 全绿（根模块、`relaykit`、`tokenkit`）
-- [ ] 6.2 前端 `bun run typecheck`、`bun run lint`、`bun run test` 全部通过
+- [x] 6.1 三模块构建与 `make test` 全绿（根模块、`relaykit`、`tokenkit`）
+- [x] 6.2 前端 `bun run typecheck`、`bun run lint`、`bun run test` 全部通过
 - [ ] 6.3 三数据库迁移验证：SQLite / MySQL / PostgreSQL 各在全新库与升级库上启动两次，确认建表幂等且既有数据与索引保留
-- [ ] 6.4 计费对账：Claude / Gemini / OpenAI 三种格式的 quota 计算结果与上游实现一致
+- [x] 6.4 计费对账：Claude / Gemini / OpenAI 三种格式的 quota 计算结果与上游实现一致
 - [ ] 6.5 部署验证：构建镜像、`docker compose up -d --force-recreate new-api`，实测 S1 上下文限制、S2 估算偏差、S3 五项自研功能
 - [ ] 6.6 把 `main` 快进到迁移分支并推送到 fork；验证 `git log origin/main..HEAD` 只包含预期提交
 
