@@ -1,0 +1,16 @@
+# 迁移验证用最小镜像：所有编译在宿主机完成，容器内只做文件装配。
+# 构建前需把宿主机的 CA bundle / busybox(wget) / 时区文件暂存到构建上下文根目录：
+#   cp /etc/ssl/certs/ca-certificates.crt p55-ca-certificates.crt
+#   cp /usr/bin/busybox p55-busybox
+#   cp /usr/share/zoneinfo/Asia/Shanghai p55-zoneinfo-shanghai
+FROM debian:bookworm-slim
+
+COPY new-api /new-api
+COPY LICENSE NOTICE THIRD-PARTY-LICENSES.md /app/licenses/
+COPY p55-ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY p55-zoneinfo-shanghai /usr/share/zoneinfo/Asia/Shanghai
+# busybox 按 argv[0] 分发，命名为 wget 后可直接满足 compose healthcheck。
+COPY p55-busybox /usr/bin/wget
+
+WORKDIR /app
+ENTRYPOINT ["/new-api"]
