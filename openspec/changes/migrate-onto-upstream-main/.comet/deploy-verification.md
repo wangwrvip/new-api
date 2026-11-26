@@ -151,3 +151,16 @@ P5.4 已在 `service/text_quota_test.go` 增加 Claude / Gemini / OpenAI 固定 
 
 结论：大上下文下偏差稳定在 **+27%**，不是小请求固定开销导致；`FamilyUnknown` 权重对 GLM 文本系统性高估（约每 6.1 字符/token 的实际值被估成约 4.8 字符/token）。因此 S2 在 GLM 上仍 **FAIL**；需要为 GLM/DeepSeek 增加校准家族或调整验收口径，不能声称 ≤10% 已达成。
 
+### 7.1 协议对比：`/v1/messages`（Anthropic）同模型复测
+
+2026-11-26 追加，模型 `glm-5.3`，20 个 Anthropic 工具定义，同一批大文本，`/v1/messages`；实际值按 Anthropic 语义 `input_tokens + cache_read_input_tokens`。
+
+| 用例 | 请求体 | 估算 | 实际输入 | 偏差 |
+| --- | ---: | ---: | ---: | ---: |
+| A1 | 660KB | 136009 | 107306 | **+26.75%** |
+| A2 | 910KB | 187537 | 147684（input 40420 + cache 107264） | **+26.99%** |
+| A3 | 1.11MB | 228759 | 179986（input 32530 + cache 147456） | **+27.10%** |
+
+协议从 OpenAI 换成 Anthropic 后偏差几乎不变，说明问题不在请求格式/工具序列化，而在 GLM 文本的 tokenizer 权重。
+
+
