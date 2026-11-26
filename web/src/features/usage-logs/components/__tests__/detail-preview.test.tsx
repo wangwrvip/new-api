@@ -410,34 +410,40 @@ test.each([
   }
 )
 
-test('task log prices use localized unit labels from pricing metadata', async () => {
-  client.setQueryData(['pricing'], {
-    data: [
-      {
-        model_name: 'wan2.5-i2v-preview',
-        billing_usage_schema: {
-          images: {
-            type: 'number',
-            unit: 'count',
-            unitLabel: { en: 'image', zh: '张' },
+test(
+  'task log prices use localized unit labels from pricing metadata',
+  async () => {
+    client.setQueryData(['pricing'], {
+      data: [
+        {
+          model_name: 'wan2.5-i2v-preview',
+          billing_usage_schema: {
+            images: {
+              type: 'number',
+              unit: 'count',
+              unitLabel: { en: 'image', zh: '张' },
+            },
           },
         },
-      },
-    ],
-    vendors: [],
-  })
-  const preview = renderPreview({
-    is_task: true,
-    billing_mode: 'tiered_expr',
-    expr_b64: btoa('tier("images", u("images") * 0.25)'),
-    matched_tier: 'images',
-  })
-  expect(preview).toHaveTextContent('images · images $0.25/image')
-  await act(() => i18n.changeLanguage('zh-CN'))
-  expect(
-    screen.getByRole('button', { name: /images · images/ })
-  ).toHaveTextContent('images · images $0.25/张')
-})
+      ],
+      vendors: [],
+    })
+    const preview = renderPreview({
+      is_task: true,
+      billing_mode: 'tiered_expr',
+      expr_b64: btoa('tier("images", u("images") * 0.25)'),
+      matched_tier: 'images',
+    })
+    expect(preview).toHaveTextContent('images · images $0.25/image')
+    await act(() => i18n.changeLanguage('zh-CN'))
+    expect(
+      screen.getByRole('button', { name: /images · images/ })
+    ).toHaveTextContent('images · images $0.25/张')
+  },
+  // The full suite is CPU-bound; the default 20s is too tight for this
+  // i18n + table render case. It passes in ~3s when run alone.
+  30_000
+)
 
 test('task log prices select the executing provider’s schema', () => {
   client.setQueryData(['pricing'], {
