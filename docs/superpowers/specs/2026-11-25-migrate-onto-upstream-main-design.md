@@ -2,6 +2,8 @@
 comet_change: migrate-onto-upstream-main
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-11-26-migrate-onto-upstream-main
+status: final
 ---
 
 # 迁移到上游 main 的技术设计

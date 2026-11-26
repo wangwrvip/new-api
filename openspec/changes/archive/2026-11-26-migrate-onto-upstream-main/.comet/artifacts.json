@@ -4,5 +4,6 @@
   "openspec_tasks": "openspec/changes/migrate-onto-upstream-main/tasks.md",
   "openspec_delta_spec": "openspec/changes/migrate-onto-upstream-main/specs/context-token-limit/spec.md",
   "handoff_context": "openspec/changes/migrate-onto-upstream-main/.comet/handoff/design-context.json",
-  "handoff_markdown": "openspec/changes/migrate-onto-upstream-main/.comet/handoff/design-context.md"
+  "handoff_markdown": "openspec/changes/migrate-onto-upstream-main/.comet/handoff/design-context.md",
+  "archive_directory": "openspec/changes/archive/2026-11-26-migrate-onto-upstream-main"
 }

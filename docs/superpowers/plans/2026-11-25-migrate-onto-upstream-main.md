@@ -2,6 +2,7 @@
 change: migrate-onto-upstream-main
 design-doc: docs/superpowers/specs/2026-11-25-migrate-onto-upstream-main-design.md
 base-ref: 4fc13c05949e1ba81bc9aae192a379c57a39bca3
+archived-with: 2026-11-26-migrate-onto-upstream-main
 ---
 
 # 迁移到上游 main 实施计划
