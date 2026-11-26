@@ -83,7 +83,9 @@ services:
       POSTGRES_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
       POSTGRES_DB: new-api
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      # 本部署沿用旧版 compose 的宿主机绑定挂载，保留既有数据；
+      # 上游默认的命名卷会让重建后的 postgres 变成空库并触发 setup 向导。
+      - ./pg_data:/var/lib/postgresql/data
     networks:
       - new-api-network
 #    ports:
