@@ -182,5 +182,18 @@ P5.4 已在 `service/text_quota_test.go` 增加 Claude / Gemini / OpenAI 固定 
 - `request_preview_user`：发送一条最后 user 消息为 `<system-reminder>…</system-reminder>\nActual question: …` 的请求，日志预览为 `Actual question: reply with the single word OK`，system-reminder 已被过滤；`CombineText` 未清洗，token 计数不受影响。
 - `response_preview`：同一请求返回 `OK`，日志预览为 `OK`；reasoning/thinking 只在没有可见正文时回退。
 
+## 10. 补充：`glm-5.3` + `/v1/messages` 三档复测
+
+2026-11-26 追加，模型 `glm-5.3`（Anthropic 协议），20 个工具，实际值按 `input_tokens + cache_read_input_tokens`：
+
+| 用例 | 上游实际输入 | 估算 | 偏差 |
+| --- | ---: | ---: | ---: |
+| 100K（660KB） | 108921 | 108921 | **0.000%** |
+| 300K（1.84MB） | 297889（189089 + 108800） | 297889 | **0.000%** |
+| 500K（3.06MB） | 494934（197206 + 297728） | 494933 | **-0.0002%** |
+
+结论：OpenAI 与 Anthropic 两种协议下，GLM 的估算都与上游实际计量一致，S2 通过。
+
+
 
 
