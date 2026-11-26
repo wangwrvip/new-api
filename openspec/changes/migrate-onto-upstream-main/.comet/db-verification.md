@@ -189,3 +189,11 @@ sudo -n mysql -e 'SELECT VERSION(); SHOW DATABASES;'
 | MySQL 8.0.46（宿主原生） | BLOCKED：`ur` 无 CREATE DATABASE 权限、sudo 需口令、docker pull 被权限拒绝 | 未执行 | 未验证 |
 
 阻塞解除条件：允许拉取 `mysql:8.2` 并由临时容器提供全新库（或管理员预建空库并授权），再按 brief Step 3 执行两次启动与列/默认值/索引断言。在此之前不能声称三数据库全部验证通过；实际部署使用的 PostgreSQL 路径已验证通过。
+
+## Owner 裁决（2026-11-26）
+
+部署方确认当前及可预见的生产环境均使用 PostgreSQL，MySQL 不测试、后续不会使用。因此：
+
+- 本 change 只保证 SQLite 与 PostgreSQL 的验证结果；
+- **不得对外声称三数据库全部兼容**；
+- 将来若启用 MySQL，必须补跑全新库 + 升级库 + 连续两次启动的矩阵，重点验证 `users.department` 的中文 DEFAULT 在非 utf8mb4 历史库上的行为。
