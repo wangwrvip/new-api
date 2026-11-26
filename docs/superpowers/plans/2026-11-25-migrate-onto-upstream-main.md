@@ -1245,10 +1245,10 @@ Expected: 推送成功；`git rev-parse fork/main` 等于 `git rev-parse main`�
 
 ### Gate G5: 最终门禁
 
-- [ ] P5.1–P5.5 全部通过，记录文件齐全。
-- [ ] `main` 已快进且 `git log origin/main..HEAD` 只含预期提交。
-- [ ] `git status --porcelain` 无输出。
-- [ ] 三库验证、估算偏差、计费对账、S1–S5 证据均可追溯（`db-verification.md`、`estimate-deviation.md`、`deploy-verification.md`）。
+- [x] P5.1–P5.5 全部通过，记录文件齐全（P5.3 的 MySQL 按 owner 裁决不测试；S3 管理接口无 dashboard 凭据，按静态/接口证据验收）。
+- [x] `main` 已重置到迁移分支并强推 fork（历史分叉，经用户授权；非快进）；`git log origin/main..HEAD` 只含预期提交。
+- [x] `git status --porcelain` 无输出。
+- [x] 三库验证、估算偏差、计费对账、S1–S5 证据均可追溯（`db-verification.md`、`estimate-deviation.md`、`deploy-verification.md`、`gate-g5.md`）。
 
 ---
 
