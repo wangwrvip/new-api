@@ -115,7 +115,10 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	var createAt int64 = 0
 	var systemFingerprint string
 	var containStreamUsage bool
+	// responseTextBuilder keeps the full output (reasoning, tool calls) for the
+	// token fallback; visibleResponseTextBuilder keeps only user-visible content.
 	var responseTextBuilder strings.Builder
+	var visibleResponseTextBuilder strings.Builder
 	var toolCount int
 	var usage = &dto.Usage{}
 	var lastStreamData string
@@ -137,7 +140,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 			lastStreamData = data
 			observeStreamChoices(info, data, seenStreamToolCalls, &streamFunctionCallNames)
-			if err := processTokenData(info, data, &responseTextBuilder, &toolCount); err != nil {
+			if err := processTokenData(info, data, &visibleResponseTextBuilder, &responseTextBuilder, &toolCount); err != nil {
 				logger.LogError(c, common.LogText("error processing stream token data: %s", err.Error()))
 				sr.Error(err)
 			}
@@ -146,8 +149,13 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	info.StreamStatus.RequireTerminal()
 
-	// Response preview: the accumulated stream output (content + reasoning).
-	info.SetResponsePreview(responseTextBuilder.String())
+	// Response preview: user-visible content only; reasoning and tool calls are
+	// the fallback when the model produced no visible text.
+	preview := visibleResponseTextBuilder.String()
+	if preview == "" {
+		preview = responseTextBuilder.String()
+	}
+	info.SetResponsePreview(preview)
 
 	// 处理最后的响应
 	shouldSendLastResp := true
@@ -303,11 +311,15 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 	info.ApplyVendorToolUsage(responseBody)
 
-	// Response preview: non-stream text (content + reasoning), matching the
-	// stream accumulator's scope.
+	// Response preview: user-visible content only; reasoning is the fallback
+	// when the model produced no visible text.
 	var previewText strings.Builder
 	for _, choice := range simpleResponse.Choices {
-		previewText.WriteString(choice.Message.StringContent())
+		content := choice.Message.StringContent()
+		if content != "" {
+			previewText.WriteString(content)
+			continue
+		}
 		previewText.WriteString(choice.Message.GetReasoningContent())
 	}
 	info.SetResponsePreview(previewText.String())

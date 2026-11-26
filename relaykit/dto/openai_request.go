@@ -253,7 +253,9 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 				} else if m.Type == ContentTypeText {
 					texts = append(texts, m.Text)
 					if message.Role == "user" {
-						userTexts = append(userTexts, m.Text)
+						if cleaned := CleanUserPreviewText(m.Text); cleaned != "" {
+							userTexts = append(userTexts, cleaned)
+						}
 					}
 				}
 			}

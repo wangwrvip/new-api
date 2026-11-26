@@ -137,7 +137,30 @@ func ProcessStreamResponse(streamResponse dto.ChatCompletionsStreamResponse, res
 	return nil
 }
 
-func processTokenData(info *relaycommon.RelayInfo, data string, responseTextBuilder *strings.Builder, toolCount *int) error {
+// ProcessStreamResponseParts splits one streamed chunk into user-visible text
+// and the full output text. Reasoning content and tool-call arguments still
+// count toward the output-token fallback, but must not lead the log's response
+// preview.
+func ProcessStreamResponseParts(streamResponse dto.ChatCompletionsStreamResponse, visible *strings.Builder, all *strings.Builder, toolCount *int) {
+	for _, choice := range streamResponse.Choices {
+		if content := choice.Delta.GetContentString(); content != "" {
+			visible.WriteString(content)
+			all.WriteString(content)
+		}
+		all.WriteString(choice.Delta.GetReasoningContent())
+		if choice.Delta.ToolCalls != nil {
+			if len(choice.Delta.ToolCalls) > *toolCount {
+				*toolCount = len(choice.Delta.ToolCalls)
+			}
+			for _, tool := range choice.Delta.ToolCalls {
+				all.WriteString(tool.Function.Name)
+				all.WriteString(tool.Function.Arguments)
+			}
+		}
+	}
+}
+
+func processTokenData(info *relaycommon.RelayInfo, data string, visible *strings.Builder, all *strings.Builder, toolCount *int) error {
 	switch info.RelayMode {
 	case relayconstant.RelayModeChatCompletions:
 		var streamResponse dto.ChatCompletionsStreamResponse
@@ -145,20 +168,21 @@ func processTokenData(info *relaycommon.RelayInfo, data string, responseTextBuil
 			return err
 		}
 		info.ObserveResponseModel(streamResponse.Model)
-		return ProcessStreamResponse(streamResponse, responseTextBuilder, toolCount)
+		ProcessStreamResponseParts(streamResponse, visible, all, toolCount)
 	case relayconstant.RelayModeCompletions:
 		var streamResponse dto.CompletionsStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 			return err
 		}
-		processCompletionsStreamResponse(streamResponse, responseTextBuilder)
+		processCompletionsStreamResponse(streamResponse, visible, all)
 	}
 	return nil
 }
 
-func processCompletionsStreamResponse(streamResponse dto.CompletionsStreamResponse, responseTextBuilder *strings.Builder) {
+func processCompletionsStreamResponse(streamResponse dto.CompletionsStreamResponse, visible *strings.Builder, all *strings.Builder) {
 	for _, choice := range streamResponse.Choices {
-		responseTextBuilder.WriteString(choice.Text)
+		visible.WriteString(choice.Text)
+		all.WriteString(choice.Text)
 	}
 }
 

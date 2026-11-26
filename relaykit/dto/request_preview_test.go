@@ -97,3 +97,71 @@ func TestOpenAIResponsesRequestStringInput(t *testing.T) {
 	meta := req.GetTokenCountMeta()
 	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
 }
+
+// A trailing user turn that only carries a client-injected system reminder must
+// not replace the last real user message in the preview, while the reminder
+// still counts toward the prompt estimate.
+func TestGeneralOpenAIRequestLastUserMessageSkipsSystemReminder(t *testing.T) {
+	raw := []byte(`{
+		"model": "gpt-4o",
+		"messages": [
+			{"role": "user", "content": "你是什么模型"},
+			{"role": "assistant", "content": "我是 AI"},
+			{"role": "user", "content": "<system-reminder>injected context</system-reminder>"}
+		]
+	}`)
+	var req GeneralOpenAIRequest
+	require.NoError(t, kitutil.Unmarshal(raw, &req))
+
+	meta := req.GetTokenCountMeta()
+	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
+	assert.Contains(t, meta.CombineText, "injected context")
+}
+
+func TestGeneralOpenAIRequestLastUserMessageKeepsTextAfterSystemReminder(t *testing.T) {
+	raw := []byte(`{
+		"model": "gpt-4o",
+		"messages": [
+			{"role": "user", "content": [
+				{"type": "text", "text": "<system-reminder>injected\ncontext</system-reminder>"},
+				{"type": "text", "text": "你是什么模型"}
+			]}
+		]
+	}`)
+	var req GeneralOpenAIRequest
+	require.NoError(t, kitutil.Unmarshal(raw, &req))
+
+	meta := req.GetTokenCountMeta()
+	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
+}
+
+func TestClaudeRequestLastUserMessageSkipsSystemReminder(t *testing.T) {
+	raw := []byte(`{
+		"model": "claude-3-5-sonnet-20241022",
+		"messages": [
+			{"role": "user", "content": "你是什么模型"},
+			{"role": "assistant", "content": [{"type": "text", "text": "我是 AI"}]},
+			{"role": "user", "content": [{"type": "text", "text": "<system-reminder>injected context</system-reminder>"}]}
+		]
+	}`)
+	var req ClaudeRequest
+	require.NoError(t, kitutil.Unmarshal(raw, &req))
+
+	meta := req.GetTokenCountMeta()
+	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
+	assert.Contains(t, meta.CombineText, "injected context")
+}
+
+func TestClaudeRequestLastUserMessageKeepsTextAfterSystemReminder(t *testing.T) {
+	raw := []byte(`{
+		"model": "claude-3-5-sonnet-20241022",
+		"messages": [
+			{"role": "user", "content": "<system-reminder>injected\ncontext</system-reminder>\n你是什么模型"}
+		]
+	}`)
+	var req ClaudeRequest
+	require.NoError(t, kitutil.Unmarshal(raw, &req))
+
+	meta := req.GetTokenCountMeta()
+	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
+}

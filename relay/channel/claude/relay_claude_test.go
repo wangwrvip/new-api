@@ -2,10 +2,12 @@ package claude
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -501,4 +503,92 @@ func TestClaudeResponsePassesInputTransformationsThrough(t *testing.T) {
 		transformations + `,"usage":{"input_tokens":5,"output_tokens":1}}}`
 	require.Nil(t, HandleStreamResponseData(c, info, &ClaudeResponseInfo{Usage: &dto.Usage{}}, event))
 	assert.Contains(t, w.Body.String(), "data: "+event+"\n")
+}
+
+func newClaudePreviewTestContext(t *testing.T, stream bool) (*gin.Context, *relaycommon.RelayInfo) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	previousTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	previousLogConsume := common.LogConsumeEnabled
+	common.LogConsumeEnabled = true
+	t.Cleanup(func() {
+		constant.StreamingTimeout = previousTimeout
+		common.LogConsumeEnabled = previousLogConsume
+	})
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "test-model",
+		RelayFormat:     types.RelayFormatClaude,
+		IsStream:        stream,
+		DisablePing:     true,
+		StartTime:       time.Now(),
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "test-model"},
+	}
+	return c, info
+}
+
+func TestClaudeStreamResponsePreviewPrefersVisibleText(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "thinking first then text",
+			body: "data: " + `{"type":"message_start","message":{"id":"msg_1","model":"m","usage":{"input_tokens":2,"output_tokens":0}}}` + "\n\n" +
+				"data: " + `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"reasoning"}}` + "\n\n" +
+				"data: " + `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"visible"}}` + "\n\n" +
+				"data: " + `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}` + "\n\n" +
+				"data: " + `{"type":"message_stop"}` + "\n\n",
+			want: "visible",
+		},
+		{
+			name: "thinking only falls back",
+			body: "data: " + `{"type":"message_start","message":{"id":"msg_1","model":"m","usage":{"input_tokens":2,"output_tokens":0}}}` + "\n\n" +
+				"data: " + `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"reasoning"}}` + "\n\n" +
+				"data: " + `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}` + "\n\n" +
+				"data: " + `{"type":"message_stop"}` + "\n\n",
+			want: "reasoning",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, info := newClaudePreviewTestContext(t, true)
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(tc.body)),
+			}
+			_, apiErr := ClaudeStreamHandler(c, resp, info)
+			require.Nil(t, apiErr)
+			assert.Equal(t, tc.want, info.ResponsePreview)
+		})
+	}
+}
+
+func TestClaudeResponsePreviewPrefersTextAndFallsBackToThinking(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "text and thinking",
+			body: `{"id":"msg_1","type":"message","model":"m","content":[{"type":"thinking","thinking":"reasoning"},{"type":"text","text":"visible"}],"stop_reason":"end_turn","usage":{"input_tokens":2,"output_tokens":3}}`,
+			want: "visible",
+		},
+		{
+			name: "thinking only falls back",
+			body: `{"id":"msg_1","type":"message","model":"m","content":[{"type":"thinking","thinking":"reasoning"}],"stop_reason":"end_turn","usage":{"input_tokens":2,"output_tokens":3}}`,
+			want: "reasoning",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, info := newClaudePreviewTestContext(t, false)
+			require.Nil(t, HandleClaudeResponseData(c, info, &ClaudeResponseInfo{Usage: &dto.Usage{}}, nil, []byte(tc.body)))
+			assert.Equal(t, tc.want, info.ResponsePreview)
+		})
+	}
 }

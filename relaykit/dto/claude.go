@@ -333,7 +333,9 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 			if content != "" {
 				texts = append(texts, content)
 				if message.Role == "user" {
-					userTexts = append(userTexts, content)
+					if cleaned := CleanUserPreviewText(content); cleaned != "" {
+						userTexts = append(userTexts, cleaned)
+					}
 				}
 			}
 		} else {
@@ -341,9 +343,12 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 			for _, media := range content {
 				switch media.Type {
 				case "text":
-					texts = append(texts, media.GetText())
+					text := media.GetText()
+					texts = append(texts, text)
 					if message.Role == "user" {
-						userTexts = append(userTexts, media.GetText())
+						if cleaned := CleanUserPreviewText(text); cleaned != "" {
+							userTexts = append(userTexts, cleaned)
+						}
 					}
 				case "image":
 					if source := media.ToFileSource(); source != nil {

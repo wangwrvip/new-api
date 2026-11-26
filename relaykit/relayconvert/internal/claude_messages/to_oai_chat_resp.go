@@ -18,6 +18,10 @@ type ClaudeResponseInfo struct {
 	Created      int64
 	Model        string
 	ResponseText strings.Builder
+	// VisibleText accumulates only user-visible text deltas. The response
+	// preview prefers it so thinking and tool JSON never lead the preview;
+	// ResponseText still feeds the output-token fallback.
+	VisibleText strings.Builder
 	// ToolUseCount counts streamed tool_use blocks for the output-token fallback.
 	ToolUseCount int
 	Usage        *dto.Usage
@@ -520,6 +524,7 @@ func FormatClaudeResponseInfo(claudeResponse *dto.ClaudeResponse, oaiResponse *d
 	} else if claudeResponse.Type == "content_block_delta" {
 		if claudeResponse.Delta != nil {
 			if claudeResponse.Delta.Text != nil {
+				claudeInfo.VisibleText.WriteString(*claudeResponse.Delta.Text)
 				claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Text)
 			}
 			if claudeResponse.Delta.Thinking != nil {
