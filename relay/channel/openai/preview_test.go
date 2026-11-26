@@ -101,6 +101,16 @@ func TestOpenaiHandlerResponsePreviewPrefersVisibleContent(t *testing.T) {
 			body: `{"id":"c1","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":"thinking"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`,
 			want: "thinking",
 		},
+		{
+			name: "multiple choices visible content wins over other choice reasoning",
+			body: `{"id":"c1","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":"thinking"},"finish_reason":"stop"},{"index":1,"message":{"role":"assistant","content":"visible"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`,
+			want: "visible",
+		},
+		{
+			name: "multiple choices all reasoning falls back",
+			body: `{"id":"c1","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"","reasoning_content":"thinking"},"finish_reason":"stop"},{"index":1,"message":{"role":"assistant","content":"","reasoning_content":"more"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`,
+			want: "thinkingmore",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, info := newResponsePreviewTestContext(t, false)

@@ -313,16 +313,17 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	// Response preview: user-visible content only; reasoning is the fallback
 	// when the model produced no visible text.
-	var previewText strings.Builder
+	var visiblePreview strings.Builder
+	var fallbackPreview strings.Builder
 	for _, choice := range simpleResponse.Choices {
-		content := choice.Message.StringContent()
-		if content != "" {
-			previewText.WriteString(content)
-			continue
-		}
-		previewText.WriteString(choice.Message.GetReasoningContent())
+		visiblePreview.WriteString(choice.Message.StringContent())
+		fallbackPreview.WriteString(choice.Message.GetReasoningContent())
 	}
-	info.SetResponsePreview(previewText.String())
+	preview := visiblePreview.String()
+	if preview == "" {
+		preview = fallbackPreview.String()
+	}
+	info.SetResponsePreview(preview)
 
 	forceFormat := false
 	if info.ChannelSetting.ForceFormat {
