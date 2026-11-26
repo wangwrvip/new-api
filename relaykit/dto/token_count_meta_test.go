@@ -99,6 +99,29 @@ func TestTokenCountMetaCountsAgentLoopContent(t *testing.T) {
 	}
 }
 
+// Claude replay history includes extended-thinking blocks, which the upstream
+// counts as input context even though they are not visible user text.
+func TestClaudeTokenCountMetaCountsThinkingBlocks(t *testing.T) {
+	const thinking = "step one: inspect the request\nstep two: trace the estimator"
+	const redacted = "ENCRYPTED-REDACTED-THINKING-PAYLOAD"
+
+	var request ClaudeRequest
+	require.NoError(t, kitutil.UnmarshalJsonStr(`{"model":"m","max_tokens":1,"messages":[
+		{"role":"user","content":"summarize the plan"},
+		{"role":"assistant","content":[
+			{"type":"thinking","thinking":"step one: inspect the request\nstep two: trace the estimator","signature":"sig"},
+			{"type":"redacted_thinking","data":"ENCRYPTED-REDACTED-THINKING-PAYLOAD"},
+			{"type":"text","text":"visible answer"}]}]}`, &request))
+
+	meta := request.GetTokenCountMeta()
+	assert.Contains(t, meta.CombineText, thinking)
+	assert.Contains(t, meta.CombineText, redacted)
+	assert.Contains(t, meta.CombineText, "visible answer")
+	// Thinking belongs to the assistant history and must not leak into the
+	// preview of the last user message.
+	assert.Equal(t, "summarize the plan", meta.LastUserMessage)
+}
+
 // Embedding input can mix bare strings with chat-style parts; text parts count
 // as text and image and video parts as files, like chat message content.
 func TestEmbeddingTokenCountMetaCountsChatStyleParts(t *testing.T) {

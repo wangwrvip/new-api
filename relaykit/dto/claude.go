@@ -386,6 +386,15 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 							texts = append(texts, string(b))
 						}
 					}
+				case "thinking":
+					// Extended-thinking blocks are part of the context the model reads.
+					if media.Thinking != nil && *media.Thinking != "" {
+						texts = append(texts, *media.Thinking)
+					}
+				case "redacted_thinking":
+					if media.Data != "" {
+						texts = append(texts, media.Data)
+					}
 				}
 			}
 		}
