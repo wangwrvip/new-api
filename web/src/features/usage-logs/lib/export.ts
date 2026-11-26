@@ -19,7 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
 
 import type { UsageLog } from '../data/schema'
-import { logTokenName, parseLogOther, renderLogContent } from './format'
+import {
+  getTokenBreakdown,
+  logTokenName,
+  parseLogOther,
+  renderLogContent,
+} from './format'
 import {
   getLogTypeConfig,
   isDisplayableLogType,
@@ -62,6 +67,7 @@ export function getLogCsvRow(
 ): string[] {
   const other = parseLogOther(log.other ?? '')
   const usage = isDisplayableLogType(log.type)
+  const { inputTokens, cacheRead } = getTokenBreakdown(log, other)
   const cacheWrite =
     (other?.cache_creation_tokens_5m ?? 0) +
       (other?.cache_creation_tokens_1h ?? 0) ||
@@ -82,9 +88,9 @@ export function getLogCsvRow(
     log.model_name ?? '',
     ...(isAdmin ? [channel] : []),
     usage ? t(log.is_stream ? 'Yes' : 'No') : '',
-    usage ? String(log.prompt_tokens ?? 0) : '',
+    usage ? String(inputTokens) : '',
     usage ? String(log.completion_tokens ?? 0) : '',
-    usage ? String(other?.cache_tokens ?? 0) : '',
+    usage ? String(cacheRead) : '',
     usage ? String(cacheWrite) : '',
     usage ? formatLogQuota(log.quota ?? 0) : '',
     isTimingLogType(log.type) ? `${log.use_time ?? 0}s` : '',

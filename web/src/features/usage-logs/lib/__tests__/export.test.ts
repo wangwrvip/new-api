@@ -106,7 +106,7 @@ describe('usage log CSV export', () => {
       'default',
       'gpt-4o-mini',
       '是',
-      '2008',
+      '102',
       '16',
       '1906',
       '15',
@@ -116,6 +116,29 @@ describe('usage log CSV export', () => {
       'req-1',
       '',
     ])
+  })
+
+  test('uses the normalized input and prefers the cache read component', async () => {
+    const t = await chineseTranslator()
+    const header = getLogCsvHeader(false, t)
+
+    const row = getLogCsvRow(
+      {
+        ...consumeLog,
+        prompt_tokens: 494934,
+        input_tokens: 197206,
+        cache_read_tokens: 297728,
+        other: JSON.stringify({
+          cache_tokens: 300000,
+          estimated_prompt_tokens: 494938,
+        }),
+      },
+      false,
+      t
+    )
+
+    expect(row[header.indexOf('Input Tokens')]).toBe('197206')
+    expect(row[header.indexOf('Cache Read')]).toBe('297728')
   })
 
   test('cache write cell counts OpenAI 12-hour writes once as part of the total', async () => {

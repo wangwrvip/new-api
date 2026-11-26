@@ -22,7 +22,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import type { UsageLog } from '../../data/schema'
@@ -204,5 +204,67 @@ describe('token breakdown', () => {
     expect(screen.getByText('197,206 / 1')).toBeVisible()
     expect(screen.getByText('Cache↓ 297,728')).toBeVisible()
     expect(screen.queryByText('494,934 / 1')).toBeNull()
+  })
+
+  test('keeps a Claude full-cache-hit breakdown visible in the details dialog', () => {
+    renderDetails(
+      makeLog({
+        prompt_tokens: 0,
+        completion_tokens: 1,
+        cache_read_tokens: 297728,
+        other: { cache_tokens: 297728, claude: true },
+      })
+    )
+
+    expect(rowValue('Input Tokens')).toBe('0')
+    expect(rowValue('Output Tokens')).toBe('1')
+    expect(rowValue('Cache Read')).toBe('297,728')
+  })
+
+  test('shows a Claude full-cache-hit log in the list instead of a dash', () => {
+    render(
+      <TokensCell
+        log={makeLog({
+          prompt_tokens: 0,
+          completion_tokens: 1,
+          cache_read_tokens: 297728,
+          other: { cache_tokens: 297728, claude: true },
+        })}
+      />
+    )
+
+    expect(screen.getByText('0 / 1')).toBeVisible()
+    expect(screen.getByText('Cache↓ 297,728')).toBeVisible()
+    expect(screen.queryByText('-')).toBeNull()
+  })
+
+  test('keeps an output-less full-cache-hit log visible in both the details and the list', () => {
+    renderDetails(
+      makeLog({
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        cache_read_tokens: 297728,
+        other: { cache_tokens: 297728, claude: true },
+      })
+    )
+
+    expect(rowValue('Input Tokens')).toBe('0')
+    expect(rowValue('Cache Read')).toBe('297,728')
+
+    cleanup()
+    render(
+      <TokensCell
+        log={makeLog({
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          cache_read_tokens: 297728,
+          other: { cache_tokens: 297728, claude: true },
+        })}
+      />
+    )
+
+    expect(screen.getByText('0 / 0')).toBeVisible()
+    expect(screen.getByText('Cache↓ 297,728')).toBeVisible()
+    expect(screen.queryByText('-')).toBeNull()
   })
 })
