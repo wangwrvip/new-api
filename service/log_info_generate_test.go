@@ -66,6 +66,12 @@ func TestGenerateTextOtherInfoPreviewsRespectPluginMask(t *testing.T) {
 			hidden: true,
 		},
 		{
+			name: "rejected answer hides every preview",
+			record: []relaycommon.RequestPluginRecord{{Plugin: "rp-reply", Stage: "reply",
+				Rejected: &relaycommon.RequestPluginRejected{Code: "reply.blocked"}}},
+			hidden: true,
+		},
+		{
 			name: "record without masking keeps previews",
 			record: []relaycommon.RequestPluginRecord{{Plugin: "rp-outbound", Stage: "outbound",
 				Changes: []relaycommon.RequestPluginChange{{Op: "add", Path: "temperature"}}}},
@@ -90,7 +96,7 @@ func TestGenerateTextOtherInfoPreviewsRespectPluginMask(t *testing.T) {
 			} {
 				got, exists := other[key]
 				if tt.hidden {
-					require.False(t, exists, "%s must not be written when a plugin masked content", key)
+					require.False(t, exists, "%s must not be written when a plugin masked or rejected content", key)
 					continue
 				}
 				require.True(t, exists, "%s should be written when nothing was masked", key)

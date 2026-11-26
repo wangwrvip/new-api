@@ -275,6 +275,24 @@ describe('details dialog response preview', () => {
     expect(screen.getByText('1,200 / 1,300 (-7.69%)')).toBeInTheDocument()
   })
 
+  test('adds cache writes to the actual prompt count', () => {
+    queryClients.push(
+      renderDetails(
+        {
+          group_ratio: 1,
+          claude: true,
+          cache_tokens: 300,
+          cache_creation_tokens: 500,
+          estimated_prompt_tokens: 1200,
+        },
+        false,
+        { prompt_tokens: 1000 }
+      )
+    )
+
+    expect(screen.getByText('1,200 / 1,800 (-33.33%)')).toBeInTheDocument()
+  })
+
   test('uses the recorded prompt count directly for non-Claude requests', () => {
     queryClients.push(
       renderDetails(

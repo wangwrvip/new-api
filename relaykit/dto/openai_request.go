@@ -1219,7 +1219,7 @@ func (r *OpenAIResponsesRequest) lastUserMessage() string {
 	if kitutil.GetJsonType(r.Input) == "string" {
 		var text string
 		_ = kitutil.Unmarshal(r.Input, &text)
-		return text
+		return CleanUserPreviewText(text)
 	}
 	if kitutil.GetJsonType(r.Input) != "array" {
 		return ""
@@ -1237,7 +1237,9 @@ func (r *OpenAIResponsesRequest) lastUserMessage() string {
 		if kitutil.GetJsonType(inputs[i].Content) == "string" {
 			var text string
 			if kitutil.Unmarshal(inputs[i].Content, &text) == nil && text != "" {
-				texts = append(texts, text)
+				if cleaned := CleanUserPreviewText(text); cleaned != "" {
+					texts = append(texts, cleaned)
+				}
 			}
 		} else if kitutil.GetJsonType(inputs[i].Content) == "array" {
 			var parts []MediaInput
@@ -1246,7 +1248,9 @@ func (r *OpenAIResponsesRequest) lastUserMessage() string {
 			}
 			for _, part := range parts {
 				if part.Type == "input_text" && part.Text != "" {
-					texts = append(texts, part.Text)
+					if cleaned := CleanUserPreviewText(part.Text); cleaned != "" {
+						texts = append(texts, cleaned)
+					}
 				}
 			}
 		}

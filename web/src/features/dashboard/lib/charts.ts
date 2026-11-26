@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { dataScheme as vchartDefaultDataScheme } from '@visactor/vchart/esm/theme/color-scheme/builtin/default'
+import i18n from 'i18next'
 
 import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
 import type {
@@ -24,6 +25,7 @@ import type {
   ProcessedChartData,
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
+import { toIntlLocale } from '@/i18n/languages'
 import { getCurrencyDisplay } from '@/lib/currency'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 
@@ -74,6 +76,13 @@ function renderQuotaCompat(rawQuota: number, digits = 4): string {
   return symbol + fixed
 }
 
+// Integer counts follow the interface language, like every other number the
+// dashboard renders.
+function formatInt(value: number): string {
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  return Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)
+}
+
 /**
  * Process and aggregate chart data
  */
@@ -86,8 +95,6 @@ export function processChartData(
   const tt: TFunction = t ?? ((x) => x)
   const otherLabel = tt('Other')
 
-  const formatInt = (value: number) =>
-    Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
   const formatQuotaValue = (value: number) => renderQuotaCompat(value, 4)
   const formatQuotaTotal = (value: number) => renderQuotaCompat(value, 2)
 
@@ -819,8 +826,6 @@ export function processUserChartData(
   const quotaPerUnit = config.quotaPerUnit
 
   const formatVal = (raw: number) => renderQuotaCompat(raw, 2)
-  const formatInt = (value: number) =>
-    Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
 
   const emptyResult: ProcessedUserChartData = {
     spec_user_rank: {

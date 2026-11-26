@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { TFunction } from 'i18next'
+import i18n, { type TFunction } from 'i18next'
 import pptxgenjs from 'pptxgenjs'
 
+import { toIntlLocale } from '@/i18n/languages'
 import { quotaUnitsToDollars } from '@/lib/format'
 
 import type { UsageReport } from '../types'
@@ -193,9 +194,12 @@ export async function exportUsageReportPptx(
     const page = pptx.addSlide()
     page.addText(slide.title, { x: 0.5, y: 0.3, fontSize: 24, bold: true })
     if (slide.kind === 'title') {
+      const generatedAt = new Date().toLocaleString(
+        toIntlLocale(i18n.resolvedLanguage || i18n.language)
+      )
       page.addText(
         `${t('Current period')}: ${report.current.start_date} ~ ${report.current.end_date}\n` +
-          `${t('Generated at')}: ${new Date().toLocaleString()}`,
+          `${t('Generated at')}: ${generatedAt}`,
         { x: 0.5, y: 2.0, fontSize: 16 }
       )
     } else if (

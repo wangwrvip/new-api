@@ -939,6 +939,7 @@ export const STATIC_I18N_KEYS = [
   'Wk',
   'Cache Hit Ranking',
   'User Cache Hit Rate',
+  'Usage Report',
   'Last week',
   'Last month',
   // Backend message keys rendered through t() without a literal call site.

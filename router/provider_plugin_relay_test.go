@@ -2241,6 +2241,7 @@ export function reply(ctx, res) {
 	assert.Positive(t, stopped.quota)
 	assert.Equal(t, "reply.blocked", gjson.Get(stopped.log.Other, `request_plugins.#(stage=="reply").rejected.code`).Str)
 	assert.Equal(t, "stop", gjson.Get(stopped.log.Other, `admin_info.request_plugins.#(stage=="reply").action`).Str)
+	assert.NotContains(t, stopped.log.Other, "forbidden")
 
 	// A stop of a non-stream answer: 400, billed as the answer would be.
 	harness.upstream.respond = respondWith(http.StatusOK, "application/json", strings.Replace(chatReply, `"content":"hi"`, `"content":"a forbidden answer"`, 1))
@@ -2250,6 +2251,7 @@ export function reply(ctx, res) {
 	assert.NotContains(t, rejected.body, "forbidden answer")
 	assert.Equal(t, plain.quota, rejected.quota)
 	assert.Equal(t, "reply.blocked", gjson.Get(rejected.log.Other, `request_plugins.#(stage=="reply").rejected.code`).Str)
+	assert.NotContains(t, rejected.log.Other, "forbidden answer")
 }
 
 // A Midjourney submission runs the request plugins' ingress: a rejection

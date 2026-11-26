@@ -500,10 +500,11 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   }
 
   // Local estimate vs upstream actual: both protocols now report input
-  // without cache hits, so the actual context is input + cache read.
+  // without cache hits, so the actual context is input + cache read + cache
+  // write (a write still occupies the context on its first turn).
   const estimatedPrompt = other.estimated_prompt_tokens
   if (estimatedPrompt != null) {
-    const actualPrompt = inputTokens + cacheRead
+    const actualPrompt = inputTokens + cacheRead + cacheWrite
     if (actualPrompt > 0) {
       const delta = (100 * (estimatedPrompt - actualPrompt)) / actualPrompt
       const signed = `${delta > 0 ? '+' : ''}${formatNumber(delta, locale)}%`

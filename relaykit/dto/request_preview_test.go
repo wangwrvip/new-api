@@ -98,6 +98,26 @@ func TestOpenAIResponsesRequestStringInput(t *testing.T) {
 	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
 }
 
+// Responses input carries the same client-injected system reminders as Chat
+// and Claude requests, so the preview cleaning applies here too while the
+// reminder still counts toward the prompt estimate.
+func TestOpenAIResponsesRequestLastUserMessageSkipsSystemReminder(t *testing.T) {
+	raw := []byte(`{
+		"model": "gpt-4o",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你是什么模型"}]},
+			{"type": "message", "role": "assistant", "content": [{"type": "input_text", "text": "我是 AI"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "<system-reminder>injected context</system-reminder>"}]}
+		]
+	}`)
+	var req OpenAIResponsesRequest
+	require.NoError(t, kitutil.Unmarshal(raw, &req))
+
+	meta := req.GetTokenCountMeta()
+	assert.Equal(t, "你是什么模型", meta.LastUserMessage)
+	assert.Contains(t, meta.CombineText, "injected context")
+}
+
 // A trailing user turn that only carries a client-injected system reminder must
 // not replace the last real user message in the preview, while the reminder
 // still counts toward the prompt estimate.

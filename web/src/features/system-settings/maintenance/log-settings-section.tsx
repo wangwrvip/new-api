@@ -190,7 +190,7 @@ export function LogSettingsSection(props: LogSettingsSectionProps) {
                     <FormLabel>{t('Enable request preview')}</FormLabel>
                     <FormDescription>
                       {t(
-                        'Store the first tokens of each text request for admin review in the log details. Helps detect abusive or illegitimate requests.'
+                        'Store the first tokens of each text request for the log owner and admins in the log details. Helps detect abusive or illegitimate requests.'
                       )}
                     </FormDescription>
                   </SettingsSwitchContent>
